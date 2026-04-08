@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "numinous-crunch-node"
+version = "0.1.0"
+description = "Numinous crunch node - model runner with PostgreSQL export"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncpg",
+    "model-runner-client",
+    "aiosqlite==0.21.0",
+    "pydantic==2.9.2",
+    "pandas==2.2.2",
+    "numpy~=2.0.1",
+    "aiohttp~=3.13",
+    "alembic==1.14.1",
+    "sqlalchemy==2.0.37",
+    "python-dotenv",
+    "colorama",
+]
+
+[project.scripts]
+numinous-crunch-node = "crunch_node.main:entrypoint"
+
+[tool.setuptools.packages.find]
+include = ["crunch_node*"]
