@@ -1,0 +1,95 @@
+x-common-env:
+  environment: &common-db-env
+    POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+    POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+    POSTGRES_USER: ${POSTGRES_USER:-numinous}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-numinous}
+    POSTGRES_DB: ${POSTGRES_DB:-numinous}
+
+x-newrelic-env: &newrelic-env
+  NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
+  NEW_RELIC_APP_NAME: ${NEW_RELIC_APP_NAME:-${COMPOSE_PROJECT_NAME}}
+  NEW_RELIC_LOG: stdout
+  NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: "true"
+
+x-worker-env: &worker-env
+  <<: [*common-db-env, *newrelic-env]
+  NUMINOUS_ENV: ${NUMINOUS_ENV:-test}
+  NUMINOUS_API_KEY: ${NUMINOUS_API_KEY:?error}
+  DATABASE_PATH: ${DATABASE_PATH:-/app/data/crunch_node.db}
+  PG_DSN: postgresql://${POSTGRES_USER:-numinous}:${POSTGRES_PASSWORD:-numinous}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-numinous}
+  MRC_CRUNCH_ID: ${MRC_CRUNCH_ID:?error}
+  MRC_HOST: ${MRC_HOST:-model-orchestrator}
+  MRC_PORT: ${MRC_PORT:-9091}
+  MRC_BASE_CLASSNAME: ${MRC_BASE_CLASSNAME:?error}
+  MRC_SECURE_CREDENTIALS_DIR: ${MRC_SECURE_CREDENTIALS_DIR:-}
+  CRUNCH_NODE_UID: ${CRUNCH_NODE_UID:-0}
+  CRUNCH_NODE_HOTKEY: ${CRUNCH_NODE_HOTKEY:-crunch-node}
+
+x-common-build: &common-build
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      <<: *common-db-env
+      READONLY_USER_PASSWORD: ${READONLY_USER_PASSWORD:-readonly}
+    restart: always
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -d ${POSTGRES_DB:-numinous} -U ${POSTGRES_USER:-numinous}" ]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    volumes:
+      - ./deployment/postgres/data:/var/lib/postgresql/data
+      - ./deployment/postgres/init-scripts:/docker-entrypoint-initdb.d
+    networks: [ numinousnet ]
+
+  main-worker:
+    <<: *common-build
+    environment:
+      <<: *worker-env
+      NEW_RELIC_APP_NAME: "${NEW_RELIC_APP_NAME:-${COMPOSE_PROJECT_NAME}} (Main Worker)"
+    restart: always
+    command: [ "python", "-m", "crunch_node.main" ]
+    volumes:
+      - main-worker-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [ numinousnet ]
+
+  report-worker:
+    <<: *common-build
+    environment:
+      <<: *worker-env
+      NEW_RELIC_APP_NAME: "${NEW_RELIC_APP_NAME:-${COMPOSE_PROJECT_NAME}} (Report Worker)"
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
+    restart: always
+    command: [
+      "uvicorn",
+      "crunch_node.workers.report_worker:app",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      "--workers", "${WEB_CONCURRENCY:-4}"
+    ]
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [ numinousnet ]
+
+volumes:
+  main-worker-data:
+
+networks:
+  numinousnet:
+    driver: bridge
+    name: numinousnet

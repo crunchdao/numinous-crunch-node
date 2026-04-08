@@ -1,0 +1,57 @@
+-- Numinous crunch-node PostgreSQL schema
+
+CREATE TABLE IF NOT EXISTS predictions (
+    unique_event_id   TEXT    NOT NULL,
+    miner_uid         INTEGER NOT NULL,
+    miner_hotkey      TEXT    NOT NULL,
+    track             TEXT    NOT NULL,
+    provider_type     TEXT,
+    prediction        DOUBLE PRECISION,
+    interval_start_minutes INTEGER,
+    interval_agg_prediction DOUBLE PRECISION,
+    interval_agg_count      INTEGER,
+    interval_datetime       TIMESTAMPTZ,
+    coordinator_uid   INTEGER,
+    coordinator_hotkey TEXT,
+    submitted_at      TIMESTAMPTZ,
+    run_id            TEXT,
+    version_id        TEXT,
+    PRIMARY KEY (unique_event_id, miner_uid, miner_hotkey, track, interval_start_minutes)
+);
+
+CREATE TABLE IF NOT EXISTS scores (
+    event_id          TEXT    NOT NULL,
+    miner_uid         INTEGER NOT NULL,
+    miner_hotkey      TEXT    NOT NULL,
+    track             TEXT    NOT NULL,
+    prediction        DOUBLE PRECISION,
+    event_score       DOUBLE PRECISION,
+    spec_version      INTEGER,
+    outcome           DOUBLE PRECISION,
+    coordinator_uid   INTEGER,
+    coordinator_hotkey TEXT,
+    scored_at         TIMESTAMPTZ,
+    PRIMARY KEY (event_id, miner_uid, miner_hotkey, track)
+);
+
+CREATE TABLE IF NOT EXISTS agent_runs (
+    run_id            TEXT PRIMARY KEY,
+    unique_event_id   TEXT    NOT NULL,
+    agent_version_id  TEXT,
+    miner_uid         INTEGER NOT NULL,
+    miner_hotkey      TEXT    NOT NULL,
+    track             TEXT    NOT NULL,
+    status            TEXT    NOT NULL,
+    is_final          BOOLEAN DEFAULT FALSE,
+    coordinator_uid   INTEGER,
+    coordinator_hotkey TEXT,
+    created_at        TIMESTAMPTZ,
+    updated_at        TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS agent_run_logs (
+    run_id            TEXT PRIMARY KEY,
+    log_content       TEXT,
+    created_at        TIMESTAMPTZ,
+    updated_at        TIMESTAMPTZ
+);

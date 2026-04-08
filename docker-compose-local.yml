@@ -1,0 +1,17 @@
+services:
+  model-orchestrator:
+    build:
+      context: https://github.com/crunchdao/model-orchestrator.git
+    container_name: model-orchestrator-local
+    environment:
+      DOCKER_NETWORK_NAME: ${MODEL_ORCHESTRATOR_NETWORK:-numinousnet}
+    volumes:
+      - ./deployment/model-orchestrator-local/data/:/app/data/
+      - ./deployment/model-orchestrator-local/config/:/app/config/
+      - /var/run/docker.sock:/var/run/docker.sock
+    privileged: true
+    restart: unless-stopped
+    init: true
+    ports:
+      - "9091:9091"
+    networks: [ numinousnet ]

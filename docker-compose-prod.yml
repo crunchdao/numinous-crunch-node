@@ -1,0 +1,41 @@
+## Deployment is handled by CrunchDao.
+
+services:
+  newrelic-infra:
+    image: newrelic/infrastructure:latest
+    container_name: newrelic-infra
+    restart: always
+    privileged: true
+    pid: host
+    network_mode: host
+    cgroup: host
+    cap_add:
+      - SYS_PTRACE
+    environment:
+      NRIA_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
+      NRIA_DISPLAY_NAME: ${COMPOSE_PROJECT_NAME}-host
+      NRIA_VERBOSE: 0
+    volumes:
+      - /:/host:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  db-backup:
+    image: tiredofit/db-backup:latest
+    restart: always
+    environment:
+      - CONTAINER_ENABLE_MONITORING=FALSE
+      - DB01_TYPE=pgsql
+      - DB01_HOST=postgres
+      - DB01_NAME=${POSTGRES_DB:?error}
+      - DB01_USER=${POSTGRES_USER:?error}
+      - DB01_PASS=${POSTGRES_PASSWORD:?error}
+      - DB01_BACKUP_INTERVAL=1440
+      - DB01_BACKUP_BEGIN=0000
+      - DB01_CLEANUP_TIME=10080
+      - DB01_BACKUP_LOCATION=s3
+      - DB01_S3_REGION=${AWS_S3_REGION:-eu-west-3}
+      - DB01_S3_BUCKET=${AWS_S3_BUCKET:?error}
+      - DB01_S3_PATH=${AWS_S3_PATH:-databases/numinous}
+      - DB01_S3_KEY_ID=${AWS_ACCESS_KEY_ID:?error}
+      - DB01_S3_KEY_SECRET=${AWS_SECRET_ACCESS_KEY:?error}
+    networks: [ numinousnet ]

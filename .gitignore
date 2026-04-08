@@ -6,6 +6,9 @@ dist/
 build/
 .venv/
 .env
+.production.env
 *.db
 .idea/
 .pytest_cache/
+deployment/postgres/data/
+deployment/model-orchestrator-local/data/

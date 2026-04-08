@@ -9,3 +9,5 @@ alembic==1.14.1
 sqlalchemy==2.0.37
 python-dotenv
 colorama
+fastapi
+uvicorn

@@ -19,6 +19,8 @@ dependencies = [
     "sqlalchemy==2.0.37",
     "python-dotenv",
     "colorama",
+    "fastapi",
+    "uvicorn",
 ]
 
 [project.scripts]
