@@ -23,13 +23,16 @@ class CrunchNodeNuminousClient(NuminousClient):
     ) -> None:
         if not api_key:
             raise ValueError("api_key must be a non-empty string.")
+        
+        bt_wallet = MagicMock()
+        bt_wallet.hotkey.public_key.hex = lambda: "42" * 32
 
-        super().__init__(env=env, logger=logger, bt_wallet=MagicMock())
+        super().__init__(env=env, logger=logger, bt_wallet=bt_wallet)
         self.__api_key = api_key
 
     def make_auth_headers(self, data: str) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {self.__api_key}",
+            "X-API-Key": self.__api_key,
         }
 
     def make_get_auth_headers(self) -> dict[str, str]:
