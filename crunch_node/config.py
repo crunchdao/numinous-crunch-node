@@ -23,7 +23,16 @@ class CrunchNodeConfig:
         default_factory=lambda: os.getenv("DATABASE_PATH", "./crunch_node.db")
     )
     pg_dsn: str = field(
-        default_factory=lambda: os.environ["PG_DSN"]
+        default_factory=lambda: (
+            os.getenv("PG_DSN")
+            or "postgresql://{user}:{password}@{host}:{port}/{db}".format(
+                user=os.getenv("POSTGRES_USER", "numinous"),
+                password=os.getenv("POSTGRES_PASSWORD", "numinous"),
+                host=os.getenv("POSTGRES_HOST", "localhost"),
+                port=os.getenv("POSTGRES_PORT", "5432"),
+                db=os.getenv("POSTGRES_DB", "numinous"),
+            )
+        )
     )
 
     # Model Runner Client
