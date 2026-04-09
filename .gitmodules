@@ -1,0 +1,3 @@
+[submodule "numinous"]
+    path = numinous
+    url = git@github.com:numinouslabs/numinous.git
