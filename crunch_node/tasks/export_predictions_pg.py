@@ -3,6 +3,8 @@ ExportPredictionsPg — reads unexported predictions from SQLite,
 inserts into PostgreSQL, marks as exported in SQLite.
 """
 
+from datetime import datetime
+
 from neurons.validator.db.operations import DatabaseOperations
 from neurons.validator.scheduler.task import AbstractTask
 from neurons.validator.utils.common.interval import get_interval_iso_datetime
@@ -63,10 +65,10 @@ class ExportPredictionsPg(AbstractTask):
                     interval_start_minutes,
                     p[8],   # interval_agg_prediction
                     p[9],   # interval_count
-                    str(get_interval_iso_datetime(interval_start_minutes)),
+                    datetime.fromisoformat(get_interval_iso_datetime(interval_start_minutes)),
                     self.crunch_node_uid,
                     self.crunch_node_hotkey,
-                    p[10],  # submitted_at
+                    datetime.fromisoformat(p[10]),  # submitted_at
                     p[11],  # run_id
                     p[12],  # version_id
                 ))
