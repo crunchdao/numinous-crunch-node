@@ -15,6 +15,7 @@ from model_runner_client.model_concurrent_runners.model_concurrent_runner import
 from model_runner_client.model_runners import ModelRunner
 from model_runner_client.utils.datatype_transformer import encode_data
 
+from crunch_node.tasks.register_models import base58_to_int
 from neurons.validator.db.operations import DatabaseOperations
 from neurons.validator.models.agent_runs import AgentRunsModel, AgentRunStatus
 from neurons.validator.models.event import EventsModel
@@ -76,11 +77,11 @@ class RunModels(AbstractTask):
     def _model_infos(model: ModelRunner) -> tuple[int, str, str, str]:
         """Extract (miner_uid, miner_hotkey, track, version_id) from a ModelRunner."""
         infos = model.infos
-        miner_uid = int(infos.get("model_id", infos.get("id", 0)))
-        miner_hotkey = infos.get("cruncher_hotkey", infos.get("hotkey", f"model-{miner_uid}"))
+        miner_uid = base58_to_int(infos["cruncher_id"])  # TODO: Is it unique enough to identify a miner?
+        miner_hotkey = infos["cruncher_hotkey"]
         track = infos.get("track", "MAIN")  # TODO manage the track
         # version_id = infos.get("version_id", model.deployment_id)
-        version_id = "1"  # for the crunch we don't need to care about the version because the code isn't opensourced
+        version_id = f"ver-{miner_uid}"  # for the crunch we don't need to care about the version because the code isn't opensourced
 
         return miner_uid, miner_hotkey, track, version_id
 
@@ -166,8 +167,9 @@ class RunModels(AbstractTask):
                     Argument(
                         position=1,
                         data=Variant(
-                            type=VariantType.JSON,
-                            value=encode_data(VariantType.JSON, event_data),
+                            type=VariantType.STRING,
+                            # NOTE: API on the other side don't allow for more than the subject
+                            value=encode_data(VariantType.STRING, event_data["title"]),
                         ),
                     )
                 ],
@@ -254,6 +256,7 @@ class RunModels(AbstractTask):
             exported=False,
             is_final=True,
         )
+
         await self.db_operations.upsert_agent_runs([agent_run])
 
         # Store logs
