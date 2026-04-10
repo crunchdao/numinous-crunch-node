@@ -5,38 +5,33 @@ Reads predictions, scores, agent runs directly from PG
 and exposes them via REST endpoints.
 """
 
-import os
+from contextlib import asynccontextmanager
 
 import asyncpg
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 
-app = FastAPI(title="Numinous Crunch Node — Report Worker")
+from crunch_node.config import CrunchNodeConfig
 
+config = CrunchNodeConfig()
 _pool: asyncpg.Pool | None = None
 
 
-def _pg_dsn() -> str:
-    dsn = os.getenv("PG_DSN")
-    if dsn:
-        return dsn
-    user = os.getenv("POSTGRES_USER", "numinous")
-    password = os.getenv("POSTGRES_PASSWORD", "numinous")
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5432")
-    db = os.getenv("POSTGRES_DB", "numinous")
-    return f"postgresql://{user}:{password}@{host}:{port}/{db}"
-
-
-@app.on_event("startup")
-async def _startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global _pool
-    _pool = await asyncpg.create_pool(_pg_dsn(), min_size=2, max_size=10)
+    _pool = await asyncpg.create_pool(config.pg_dsn, min_size=2, max_size=10)
 
-
-@app.on_event("shutdown")
-async def _shutdown():
-    if _pool:
+    try:
+        yield
+    finally:
         await _pool.close()
+        _pool = None
+
+
+app = FastAPI(
+    title="Numinous Crunch Node — Report Worker",
+    lifespan=lifespan,
+)
 
 
 @app.get("/health")
@@ -90,3 +85,9 @@ async def get_agent_runs(
 
     rows = await _pool.fetch(query, *args)
     return [dict(r) for r in rows]
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
