@@ -14,8 +14,6 @@ from model_runner_client.grpc.generated.commons_pb2 import Argument, Variant, Va
 from model_runner_client.model_concurrent_runners.model_concurrent_runner import ModelPredictResult
 from model_runner_client.model_runners import ModelRunner
 from model_runner_client.utils.datatype_transformer import encode_data
-
-from crunch_node.tasks.register_models import base58_to_int
 from neurons.validator.db.operations import DatabaseOperations
 from neurons.validator.models.agent_runs import AgentRunsModel, AgentRunStatus
 from neurons.validator.models.event import EventsModel
@@ -24,6 +22,8 @@ from neurons.validator.models.reasoning import MAX_REASONING_CHARS, MISSING_REAS
 from neurons.validator.scheduler.task import AbstractTask
 from neurons.validator.utils.common.interval import get_interval_start_minutes
 from neurons.validator.utils.logger.logger import NuminousLogger
+
+from crunch_node.tasks.register_models import map_miner_properties
 
 TITLE_SEPARATOR = " ==Further Information==: "
 MAX_LOG_CHARS = 25_000
@@ -76,12 +76,9 @@ class RunModels(AbstractTask):
     @staticmethod
     def _model_infos(model: ModelRunner) -> tuple[int, str, str, str]:
         """Extract (miner_uid, miner_hotkey, track, version_id) from a ModelRunner."""
-        infos = model.infos
-        miner_uid = base58_to_int(infos["cruncher_id"])  # TODO: Is it unique enough to identify a miner?
-        miner_hotkey = infos["cruncher_hotkey"]
-        track = infos.get("track", "MAIN")  # TODO manage the track
-        # version_id = infos.get("version_id", model.deployment_id)
-        version_id = f"ver-{miner_uid}"  # for the crunch we don't need to care about the version because the code isn't opensourced
+        track = "MAIN"  # TODO manage the track
+
+        miner_uid, miner_hotkey, version_id = map_miner_properties(model)
 
         return miner_uid, miner_hotkey, track, version_id
 

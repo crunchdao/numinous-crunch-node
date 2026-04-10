@@ -6,23 +6,20 @@ into the miners SQLite table so that scoring/export can reference them.
 from datetime import datetime, timezone
 
 from model_runner_client.model_cluster import ModelCluster
+from model_runner_client.model_runners import ModelRunner
 from neurons.validator.db.operations import DatabaseOperations
 from neurons.validator.models.miner_agent import MinerAgentsModel
 from neurons.validator.scheduler.task import AbstractTask
 from neurons.validator.utils.logger.logger import NuminousLogger
 
 
-BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+def map_miner_properties(model: ModelRunner):
+    miner_uid = int(model.model_id)
+    miner_hotkey = f"hotkey-{miner_uid}"
+    version_id = f"version-{miner_uid}"
 
-def base58_to_int(s: str) -> int:
-    result = 0
-    for char in s:
-        result = result * 58 + BASE58_ALPHABET.index(char)
-    
-    long_max = 2**63 - 1
-    return result % long_max
+    return miner_uid, miner_hotkey, version_id
 
-print(base58_to_int("6wyWqKLet5H22e1p2xB4dGy1edBQa9eqWP92a8X3ySw6"))
 
 class RegisterModels(AbstractTask):
     def __init__(
@@ -57,10 +54,8 @@ class RegisterModels(AbstractTask):
         now = datetime.now(timezone.utc).isoformat()
 
         for model in models.values():
-            infos = model.infos
-            miner_uid = base58_to_int(infos["cruncher_id"])  # TODO: Is it unique enough to identify a miner?
-            miner_hotkey = infos["cruncher_hotkey"]
-            node_ip = "0.0.0.0"
+            miner_uid, miner_hotkey, version_id = map_miner_properties(model)
+            node_ip = f"{model.ip}:{model.port}"
             blocktime = "0"
             is_validating = False
             validator_permit = False
@@ -80,7 +75,7 @@ class RegisterModels(AbstractTask):
             ])
 
             miner_agents.append(MinerAgentsModel(
-                version_id=f"ver-{miner_uid}",
+                version_id=version_id,
                 miner_uid=miner_uid,
                 miner_hotkey=miner_hotkey,
                 track="MAIN",
