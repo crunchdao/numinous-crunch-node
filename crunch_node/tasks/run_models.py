@@ -166,7 +166,7 @@ class RunModels(AbstractTask):
                     Argument(
                         position=1,
                         data=Variant(
-                            type=VariantType.STRING,
+                            type=VariantType.JSON,
                             value=encode_data(VariantType.JSON, event_data),
                         ),
                     )
@@ -191,7 +191,12 @@ class RunModels(AbstractTask):
         absent_count = await self._mark_absent_miners(event, models)
 
         self.logger.info(
-            f"Event processed: {event_id}, success={counts['success']}, failed={counts['failed']}, timeout={counts['timeout']}, absent={absent_count}",
+            "Processed event",
+            extra={
+                "event_id": event_id,
+                **counts,
+                "absent_count": absent_count
+            }
         )
 
     async def _mark_absent_miners(
