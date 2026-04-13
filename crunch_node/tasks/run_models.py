@@ -106,6 +106,7 @@ class RunModels(AbstractTask):
 
         for event in events:
             await self._process_event(event, interval_start_minutes)
+            # TODO add sleep to avoid calling all the model per day
 
     async def _process_event(self, event: EventsModel, interval_start_minutes: int) -> None:
         """Process a single event: pre-filter models, call via concurrent_runner, store results."""
@@ -176,8 +177,66 @@ class RunModels(AbstractTask):
         )
 
         # Process results
+        counts = {"success": 0, "failed": 0, "timeout": 0}
         for model_runner, predict_result in results.items():
-            await self._store_result(event, model_runner, predict_result, interval_start_minutes)
+            status = await self._store_result(event, model_runner, predict_result, interval_start_minutes)
+            if status == AgentRunStatus.SUCCESS:
+                counts["success"] += 1
+            elif status == AgentRunStatus.SANDBOX_TIMEOUT:
+                counts["timeout"] += 1
+            else:
+                counts["failed"] += 1
+
+        # Mark absent miners who sit out
+        absent_count = await self._mark_absent_miners(event, models)
+
+        self.logger.info(
+            f"Event processed: {event_id}, success={counts['success']}, failed={counts['failed']}, timeout={counts['timeout']}, absent={absent_count}",
+        )
+
+    async def _mark_absent_miners(
+        self,
+        event: EventsModel,
+        active_models: dict,
+    ) -> int:
+        """Create failed runs for registered miners whose model is not in models_run."""
+        event_id = event.unique_event_id
+
+        # Build set of currently active (miner_uid, miner_hotkey)
+        active_keys = set()
+        for model in active_models.values():
+            miner_uid, miner_hotkey, _, _ = self._model_infos(model)
+            active_keys.add((miner_uid, miner_hotkey))
+
+        # Get all registered miners from DB
+        all_miners = await self.db_operations.get_miners_last_registration()
+        if not all_miners:
+            return 0
+
+        absent_count = 0
+        for miner in all_miners:
+            miner_uid = int(miner.miner_uid)
+            miner_hotkey = miner.miner_hotkey
+
+            if (miner_uid, miner_hotkey) in active_keys:
+                continue
+
+            run_id = str(uuid.uuid4())
+            agent_run = AgentRunsModel(
+                run_id=run_id,
+                unique_event_id=event_id,
+                agent_version_id="1",
+                miner_uid=miner_uid,
+                miner_hotkey=miner_hotkey,
+                track=event.tracks[0] if event.tracks else "MAIN",
+                status=AgentRunStatus.INTERNAL_AGENT_ERROR,
+                exported=False,
+                is_final=True,
+            )
+            await self.db_operations.upsert_agent_runs([agent_run])
+            absent_count += 1
+
+        return absent_count
 
     async def _store_result(
         self,
@@ -185,7 +244,7 @@ class RunModels(AbstractTask):
         model_runner,
         predict_result: ModelPredictResult,
         interval_start_minutes: int,
-    ) -> None:
+    ) -> AgentRunStatus:
         """Store agent run, logs, reasoning and prediction from a ModelPredictResult."""
         miner_uid, miner_hotkey, track, version_id = self._model_infos(model_runner)
         event_id = event.unique_event_id
@@ -198,7 +257,7 @@ class RunModels(AbstractTask):
         if predict_result.status == ModelPredictResult.Status.SUCCESS:
             result = predict_result.result
             if isinstance(result, dict):
-                prediction_value = result.get("prediction")
+                prediction_value = result.get("prediction") # todo check
                 logs = result.get("logs", "")
                 raw_reasoning = result.get("reasoning", "")
 
@@ -293,3 +352,5 @@ class RunModels(AbstractTask):
                 "Stored prediction",
                 extra={"event_id": event_id, "miner_uid": miner_uid, "prediction": clipped},
             )
+
+        return status
