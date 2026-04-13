@@ -11,6 +11,7 @@ import json
 import uuid
 
 from model_runner_client.grpc.generated.commons_pb2 import Argument, Variant, VariantType
+from model_runner_client.model_concurrent_runners import DynamicSubclassModelConcurrentRunner
 from model_runner_client.model_concurrent_runners.model_concurrent_runner import ModelPredictResult
 from model_runner_client.model_runners import ModelRunner
 from model_runner_client.utils.datatype_transformer import encode_data
@@ -34,7 +35,7 @@ class RunModels(AbstractTask):
         self,
         interval_seconds: float,
         db_operations: DatabaseOperations,
-        concurrent_runner,
+        concurrent_runner: DynamicSubclassModelConcurrentRunner,
         logger: NuminousLogger,
     ):
         self.interval = interval_seconds
@@ -159,15 +160,14 @@ class RunModels(AbstractTask):
         # Call all models concurrently via the runner (uses asyncio.gather internally)
         event_data = self._build_event_data(event)
         results = await self.concurrent_runner.call(
-            method_name="predict",
+            method_name="feed_update_and_predict",
             arguments=(
                 [
                     Argument(
                         position=1,
                         data=Variant(
                             type=VariantType.STRING,
-                            # NOTE: API on the other side don't allow for more than the subject
-                            value=encode_data(VariantType.STRING, event_data["title"]),
+                            value=encode_data(VariantType.JSON, event_data),
                         ),
                     )
                 ],
