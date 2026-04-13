@@ -15,10 +15,15 @@ from neurons.validator.utils.logger.logger import NuminousLogger
 
 def map_miner_properties(model: ModelRunner):
     miner_uid = int(model.model_id)
+
+    return miner_uid, *to_miner_properties(miner_uid)
+
+
+def to_miner_properties(miner_uid: int):
     miner_hotkey = f"hotkey-{miner_uid}"
     version_id = f"version-{miner_uid}"
 
-    return miner_uid, miner_hotkey, version_id
+    return miner_hotkey, version_id
 
 
 class RegisterModels(AbstractTask):

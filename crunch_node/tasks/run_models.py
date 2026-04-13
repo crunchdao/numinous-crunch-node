@@ -23,7 +23,7 @@ from neurons.validator.scheduler.task import AbstractTask
 from neurons.validator.utils.common.interval import get_interval_start_minutes
 from neurons.validator.utils.logger.logger import NuminousLogger
 
-from crunch_node.tasks.register_models import map_miner_properties
+from crunch_node.tasks.register_models import map_miner_properties, to_miner_properties
 
 TITLE_SEPARATOR = " ==Further Information==: "
 MAX_LOG_CHARS = 25_000
@@ -205,8 +205,8 @@ class RunModels(AbstractTask):
         # Build set of currently active (miner_uid, miner_hotkey)
         active_keys = set()
         for model in active_models.values():
-            miner_uid, miner_hotkey, _, _ = self._model_infos(model)
-            active_keys.add((miner_uid, miner_hotkey))
+            miner_uid, _, _, _ = self._model_infos(model)
+            active_keys.add(miner_uid)
 
         # Get all registered miners from DB
         all_miners = await self.db_operations.get_miners_last_registration()
@@ -216,16 +216,16 @@ class RunModels(AbstractTask):
         absent_count = 0
         for miner in all_miners:
             miner_uid = int(miner.miner_uid)
-            miner_hotkey = miner.miner_hotkey
-
-            if (miner_uid, miner_hotkey) in active_keys:
+            if miner_uid in active_keys:
                 continue
+
+            miner_hotkey, version_id = to_miner_properties(int(miner.miner_uid))
 
             run_id = str(uuid.uuid4())
             agent_run = AgentRunsModel(
                 run_id=run_id,
                 unique_event_id=event_id,
-                agent_version_id="1",
+                agent_version_id=version_id,
                 miner_uid=miner_uid,
                 miner_hotkey=miner_hotkey,
                 track=event.tracks[0] if event.tracks else "MAIN",
@@ -248,7 +248,6 @@ class RunModels(AbstractTask):
         """Store agent run, logs, reasoning and prediction from a ModelPredictResult."""
         miner_uid, miner_hotkey, track, version_id = self._model_infos(model_runner)
         event_id = event.unique_event_id
-        run_id = str(uuid.uuid4())
 
         prediction_value = None
         logs = ""
@@ -257,7 +256,7 @@ class RunModels(AbstractTask):
         if predict_result.status == ModelPredictResult.Status.SUCCESS:
             result = predict_result.result
             if isinstance(result, dict):
-                prediction_value = result.get("prediction") # todo check
+                prediction_value = result.get("prediction")  # todo check
                 logs = result.get("logs", "")
                 raw_reasoning = result.get("reasoning", "")
 
@@ -301,6 +300,7 @@ class RunModels(AbstractTask):
             logs = f"[TRUNCATED: {len(logs)} chars]\n\n" + logs[-MAX_LOG_CHARS:]
 
         # Store agent run
+        run_id = str(uuid.uuid4())
         agent_run = AgentRunsModel(
             run_id=run_id,
             unique_event_id=event_id,
