@@ -134,7 +134,10 @@ async def get_leaderboard(
                 "event_count": row["event_count"],
             })
 
-    entries.sort(key=lambda x: x["brier_score"])
+    entries.sort(key=lambda x: (
+        x["brier_score"],
+        x["event_count"] == max_event_count,
+    ))
 
     return entries
 
