@@ -23,7 +23,8 @@ def _parse_dt(value: Optional[str]) -> Optional[datetime]:
 
 _FIELDS = (
     "unique_event_id, event_id, market_type, event_type, title, description,"
-    " outcome, status, cutoff, registered_date, resolved_at, created_at, tracks"
+    " outcome, status, metadata, cutoff, run_days_before_cutoff,"
+    " registered_date, resolved_at, created_at, tracks"
 )
 
 
@@ -76,7 +77,9 @@ class ExportEventsPg(AbstractTask):
                     row["description"],
                     row["outcome"],
                     int(row["status"]),
+                    row["metadata"],
                     _parse_dt(row["cutoff"]),
+                    int(row["run_days_before_cutoff"]),
                     _parse_dt(row["registered_date"]),
                     _parse_dt(row["resolved_at"]),
                     _parse_dt(row["created_at"]),
@@ -91,8 +94,9 @@ class ExportEventsPg(AbstractTask):
                     INSERT INTO events (
                         unique_event_id, event_id, market_type, event_type,
                         title, description, outcome, status,
-                        cutoff, registered_date, resolved_at, created_at, tracks
-                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                        metadata, cutoff, run_days_before_cutoff,
+                        registered_date, resolved_at, created_at, tracks
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
                     ON CONFLICT (unique_event_id) DO UPDATE SET
                         outcome = EXCLUDED.outcome,
                         status = EXCLUDED.status,
