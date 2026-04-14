@@ -90,6 +90,7 @@ async def get_agent_runs(
 
 class LeaderboardEntry(TypedDict):
     model_id: int
+    rank: int | None
     brier_score: float
     event_count: int
 
@@ -130,6 +131,7 @@ async def get_leaderboard(
         if score is not None:
             entries.append({
                 "model_id": model_id,
+                "rank": None,
                 "brier_score": score,
                 "event_count": row["event_count"],
             })
@@ -138,6 +140,10 @@ async def get_leaderboard(
         -x["event_count"],
         x["brier_score"],
     ))
+
+    for rank, entry in enumerate(entries, start=1):
+        if entry["event_count"] == max_event_count:
+            entry["rank"] = rank
 
     return entries
 
