@@ -81,6 +81,7 @@ async def main():
     )
 
     await concurrent_runner.init()
+    await asyncio.sleep(20)  # give time to the model (init)
     model_cluster = concurrent_runner.model_cluster
 
     # ── Tasks ────────────────────────────────────────────────────────
