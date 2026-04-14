@@ -51,10 +51,9 @@ async def main():
     await db_client.migrate()
 
     # Custom migrations on top of submodule's alembic
-    try:
-        await db_client.script("ALTER TABLE events ADD COLUMN pg_exported INTEGER DEFAULT 0")
-    except Exception:
-        pass  # Column already exists
+    columns = await db_client.many("PRAGMA table_info(events)")
+    if not any(col[1] == "pg_exported" for col in columns):
+        await db_client.update("ALTER TABLE events ADD COLUMN pg_exported INTEGER DEFAULT 0")
 
     # PostgreSQL
     pg_client = PgClient(dsn=config.pg_dsn)
