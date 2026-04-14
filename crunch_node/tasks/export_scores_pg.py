@@ -18,16 +18,12 @@ class ExportScoresPg(AbstractTask):
         db_operations: DatabaseOperations,
         pg_client: PgClient,
         logger: NuminousLogger,
-        crunch_node_uid: int,
-        crunch_node_hotkey: str,
     ):
         self.interval = interval_seconds
         self.page_size = page_size
         self.db_operations = db_operations
         self.pg_client = pg_client
         self.logger = logger
-        self.crunch_node_uid = crunch_node_uid
-        self.crunch_node_hotkey = crunch_node_hotkey
         self.errors_count = 0
 
     @property
@@ -64,14 +60,11 @@ class ExportScoresPg(AbstractTask):
                     (
                         s.event_id,
                         s.miner_uid,
-                        s.miner_hotkey,
                         str(s.track),
                         s.prediction,
                         s.event_score,
                         s.spec_version,
                         float(event.outcome) if event.outcome else None,
-                        self.crunch_node_uid,
-                        self.crunch_node_hotkey,
                         s.created_at,
                     )
                     for s in scores
@@ -81,11 +74,11 @@ class ExportScoresPg(AbstractTask):
                     await self.pg_client.executemany(
                         """
                         INSERT INTO scores (
-                            event_id, miner_uid, miner_hotkey, track,
+                            event_id, miner_uid, track,
                             prediction, event_score, spec_version,
-                            outcome, coordinator_uid, coordinator_hotkey, scored_at
-                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-                        ON CONFLICT (event_id, miner_uid, miner_hotkey, track)
+                            outcome, scored_at
+                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                        ON CONFLICT (event_id, miner_uid, track)
                         DO UPDATE SET
                             prediction = EXCLUDED.prediction,
                             event_score = EXCLUDED.event_score,

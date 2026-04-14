@@ -18,16 +18,12 @@ class ExportAgentRunsPg(AbstractTask):
         db_operations: DatabaseOperations,
         pg_client: PgClient,
         logger: NuminousLogger,
-        crunch_node_uid: int,
-        crunch_node_hotkey: str,
     ):
         self.interval = interval_seconds
         self.batch_size = batch_size
         self.db_operations = db_operations
         self.pg_client = pg_client
         self.logger = logger
-        self.crunch_node_uid = crunch_node_uid
-        self.crunch_node_hotkey = crunch_node_hotkey
         self.errors_count = 0
 
     @property
@@ -57,12 +53,9 @@ class ExportAgentRunsPg(AbstractTask):
                     run.unique_event_id,
                     run.agent_version_id,
                     run.miner_uid,
-                    run.miner_hotkey,
                     str(run.track),
                     run.status.value,
                     run.is_final,
-                    self.crunch_node_uid,
-                    self.crunch_node_hotkey,
                     run.created_at,
                     run.updated_at,
                 )
@@ -74,10 +67,9 @@ class ExportAgentRunsPg(AbstractTask):
                     """
                     INSERT INTO agent_runs (
                         run_id, unique_event_id, agent_version_id,
-                        miner_uid, miner_hotkey, track, status, is_final,
-                        coordinator_uid, coordinator_hotkey,
+                        miner_uid, track, status, is_final,
                         created_at, updated_at
-                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                     ON CONFLICT (run_id) DO UPDATE SET
                         status = EXCLUDED.status,
                         is_final = EXCLUDED.is_final,

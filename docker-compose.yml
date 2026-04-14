@@ -23,8 +23,6 @@ x-worker-env: &worker-env
   MRC_PORT: ${MRC_PORT:-9091}
   MRC_BASE_CLASSNAME: ${MRC_BASE_CLASSNAME:?error}
   MRC_SECURE_CREDENTIALS_DIR: ${MRC_SECURE_CREDENTIALS_DIR:-}
-  CRUNCH_NODE_UID: ${CRUNCH_NODE_UID:-0}
-  CRUNCH_NODE_HOTKEY: ${CRUNCH_NODE_HOTKEY:-crunch-node}
 
 x-common-build: &common-build
   build:

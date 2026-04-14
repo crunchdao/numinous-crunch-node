@@ -20,16 +20,12 @@ class ExportPredictionsPg(AbstractTask):
         db_operations: DatabaseOperations,
         pg_client: PgClient,
         batch_size: int,
-        crunch_node_uid: int,
-        crunch_node_hotkey: str,
         logger: NuminousLogger,
     ):
         self.interval = interval_seconds
         self.db_operations = db_operations
         self.pg_client = pg_client
         self.batch_size = batch_size
-        self.crunch_node_uid = crunch_node_uid
-        self.crunch_node_hotkey = crunch_node_hotkey
         self.logger = logger
 
     @property
@@ -58,7 +54,6 @@ class ExportPredictionsPg(AbstractTask):
                 rows.append((
                     p[1],   # unique_event_id
                     p[2],   # miner_uid
-                    p[3],   # miner_hotkey
                     p[4],   # track
                     p[5],   # event_type (provider_type)
                     p[6],   # latest_prediction
@@ -66,8 +61,6 @@ class ExportPredictionsPg(AbstractTask):
                     p[8],   # interval_agg_prediction
                     p[9],   # interval_count
                     datetime.fromisoformat(get_interval_iso_datetime(interval_start_minutes)),
-                    self.crunch_node_uid,
-                    self.crunch_node_hotkey,
                     datetime.fromisoformat(p[10]),  # submitted_at
                     p[11],  # run_id
                     p[12],  # version_id
@@ -77,13 +70,12 @@ class ExportPredictionsPg(AbstractTask):
                 await self.pg_client.executemany(
                     """
                     INSERT INTO predictions (
-                        unique_event_id, miner_uid, miner_hotkey, track,
+                        unique_event_id, miner_uid, track,
                         provider_type, prediction, interval_start_minutes,
                         interval_agg_prediction, interval_agg_count,
-                        interval_datetime, coordinator_uid, coordinator_hotkey,
-                        submitted_at, run_id, version_id
-                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-                    ON CONFLICT (unique_event_id, miner_uid, miner_hotkey, track, interval_start_minutes)
+                        interval_datetime, submitted_at, run_id, version_id
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                    ON CONFLICT (unique_event_id, miner_uid, track, interval_start_minutes)
                     DO UPDATE SET
                         prediction = EXCLUDED.prediction,
                         interval_agg_prediction = EXCLUDED.interval_agg_prediction,

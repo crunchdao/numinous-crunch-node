@@ -129,8 +129,6 @@ async def main():
         db_operations=db_operations,
         pg_client=pg_client,
         logger=logger,
-        crunch_node_uid=config.crunch_node_uid,
-        crunch_node_hotkey=config.crunch_node_hotkey,
     )
 
     export_predictions_task = ExportPredictionsPg(
@@ -138,8 +136,6 @@ async def main():
         db_operations=db_operations,
         pg_client=pg_client,
         batch_size=min(config.export_batch_size, 300),
-        crunch_node_uid=config.crunch_node_uid,
-        crunch_node_hotkey=config.crunch_node_hotkey,
         logger=logger,
     )
 
@@ -149,8 +145,6 @@ async def main():
         db_operations=db_operations,
         pg_client=pg_client,
         logger=logger,
-        crunch_node_uid=config.crunch_node_uid,
-        crunch_node_hotkey=config.crunch_node_hotkey,
     )
 
     export_agent_run_logs_task = ExportAgentRunLogsPg(

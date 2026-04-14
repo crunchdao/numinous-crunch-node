@@ -52,14 +52,6 @@ class CrunchNodeConfig:
         default_factory=lambda: os.getenv("MRC_SECURE_CREDENTIALS_DIR", "")
     )
 
-    # Crunch node identity
-    crunch_node_uid: int = field(
-        default_factory=lambda: int(os.getenv("CRUNCH_NODE_UID", "0"))
-    )
-    crunch_node_hotkey: str = field(
-        default_factory=lambda: os.getenv("CRUNCH_NODE_HOTKEY", "crunch-node")
-    )
-
     # Task intervals (seconds)
     pull_events_interval: float = field(
         default_factory=lambda: float(os.getenv("PULL_EVENTS_INTERVAL", "50.0"))
