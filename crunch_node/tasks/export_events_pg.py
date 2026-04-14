@@ -6,11 +6,20 @@ Uses a custom `pg_exported` column (added via ALTER TABLE at startup)
 since the built-in `exported` flag is already used by the scores export.
 """
 
+from datetime import datetime
+from typing import Optional
+
 from neurons.validator.db.client import DatabaseClient
 from neurons.validator.scheduler.task import AbstractTask
 from neurons.validator.utils.logger.logger import NuminousLogger
 
 from crunch_node.clients.pg_client import PgClient
+
+
+def _parse_dt(value: Optional[str]) -> Optional[datetime]:
+    if value is None:
+        return None
+    return datetime.fromisoformat(value)
 
 _FIELDS = (
     "unique_event_id, event_id, market_type, event_type, title, description,"
@@ -67,10 +76,10 @@ class ExportEventsPg(AbstractTask):
                     row["description"],
                     row["outcome"],
                     int(row["status"]),
-                    row["cutoff"],
-                    row["registered_date"],
-                    row["resolved_at"],
-                    row["created_at"],
+                    _parse_dt(row["cutoff"]),
+                    _parse_dt(row["registered_date"]),
+                    _parse_dt(row["resolved_at"]),
+                    _parse_dt(row["created_at"]),
                     row["tracks"],
                 )
                 for row in rows

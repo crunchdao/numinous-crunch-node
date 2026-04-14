@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS events (
     registered_date   TIMESTAMPTZ,
     resolved_at       TIMESTAMPTZ,
     created_at        TIMESTAMPTZ,
-    tracks            TEXT
+    tracks            JSONB
 );
 
 CREATE TABLE IF NOT EXISTS agent_run_logs (
