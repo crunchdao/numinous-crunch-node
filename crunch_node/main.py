@@ -29,6 +29,7 @@ from crunch_node.bt_compat.scoring import CrunchNodeScoring
 from crunch_node.clients.pg_client import PgClient
 from crunch_node.config import CrunchNodeConfig
 from crunch_node.tasks.export_agent_run_logs_pg import ExportAgentRunLogsPg
+from crunch_node.tasks.export_events_pg import ExportEventsPg
 from crunch_node.tasks.export_agent_runs_pg import ExportAgentRunsPg
 from crunch_node.tasks.export_predictions_pg import ExportPredictionsPg
 from crunch_node.tasks.export_scores_pg import ExportScoresPg
@@ -48,6 +49,12 @@ async def main():
     db_client = DatabaseClient(db_path=config.database_path, logger=logger)
     db_operations = DatabaseOperations(db_client=db_client, logger=logger)
     await db_client.migrate()
+
+    # Custom migrations on top of submodule's alembic
+    try:
+        await db_client.script("ALTER TABLE events ADD COLUMN pg_exported INTEGER DEFAULT 0")
+    except Exception:
+        pass  # Column already exists
 
     # PostgreSQL
     pg_client = PgClient(dsn=config.pg_dsn)
@@ -147,6 +154,14 @@ async def main():
         logger=logger,
     )
 
+    export_events_task = ExportEventsPg(
+        interval_seconds=config.pull_events_interval,
+        batch_size=config.export_batch_size,
+        db_client=db_client,
+        pg_client=pg_client,
+        logger=logger,
+    )
+
     export_agent_run_logs_task = ExportAgentRunLogsPg(
         interval_seconds=config.export_agent_run_logs_interval,
         batch_size=config.export_batch_size,
@@ -182,6 +197,7 @@ async def main():
     scheduler.add(task=export_predictions_task)
     scheduler.add(task=export_scores_task)
     scheduler.add(task=export_agent_runs_task)
+    scheduler.add(task=export_events_task)
     scheduler.add(task=export_agent_run_logs_task)
     scheduler.add(task=db_cleaner_task)
     scheduler.add(task=vacuum_task)

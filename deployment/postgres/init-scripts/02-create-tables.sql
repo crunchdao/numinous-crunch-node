@@ -40,6 +40,22 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     updated_at        TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS events (
+    unique_event_id   TEXT PRIMARY KEY,
+    event_id          TEXT NOT NULL,
+    market_type       TEXT,
+    event_type        TEXT,
+    title             TEXT,
+    description       TEXT,
+    outcome           TEXT,
+    status            INTEGER NOT NULL,
+    cutoff            TIMESTAMPTZ,
+    registered_date   TIMESTAMPTZ,
+    resolved_at       TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ,
+    tracks            TEXT
+);
+
 CREATE TABLE IF NOT EXISTS agent_run_logs (
     run_id            TEXT PRIMARY KEY,
     log_content       TEXT,
