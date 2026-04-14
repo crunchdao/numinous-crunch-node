@@ -66,7 +66,7 @@ class ExportEventsPg(AbstractTask):
                     row["title"],
                     row["description"],
                     row["outcome"],
-                    row["status"],
+                    int(row["status"]),
                     row["cutoff"],
                     row["registered_date"],
                     row["resolved_at"],
