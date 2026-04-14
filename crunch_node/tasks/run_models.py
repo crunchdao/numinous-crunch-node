@@ -7,8 +7,10 @@ via asyncio.gather internally.
 Stores predictions + agent_runs in SQLite (same schema as RunAgents).
 """
 
+import asyncio
 import json
 import uuid
+from time import time
 
 from model_runner_client.grpc.generated.commons_pb2 import Argument, Variant, VariantType
 from model_runner_client.model_concurrent_runners import DynamicSubclassModelConcurrentRunner
@@ -106,8 +108,25 @@ class RunModels(AbstractTask):
         )
 
         for event in events:
+            started_at = time()
+
             await self._process_event(event, interval_start_minutes)
-            # TODO add sleep to avoid calling all the model per day
+
+            ended_at = time()
+            took = ended_at - started_at
+
+            wait_time = max(0.0, self.concurrent_runner.timeout - took)
+            if wait_time > 0:
+                self.logger.info(
+                    "Waiting before next event",
+                    extra={
+                        "time_took": took,
+                        "allowed_time": self.concurrent_runner.timeout,
+                        "wait_time_seconds": wait_time,
+                    },
+                )
+
+                await asyncio.sleep(wait_time)
 
     async def _process_event(self, event: EventsModel, interval_start_minutes: int) -> None:
         """Process a single event: pre-filter models, call via concurrent_runner, store results."""
