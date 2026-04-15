@@ -1,0 +1,99 @@
+"""
+Gateway worker — FastAPI app serving the Gateway.
+
+Reads predictions, scores, agent runs directly from PG
+and exposes them via REST endpoints.
+"""
+
+if True:
+    # bt_compat MUST be imported before any neurons.validator.* module
+    import crunch_node.bt_compat  # noqa: F401
+
+import os
+import re
+from contextvars import ContextVar
+
+from fastapi import HTTPException, Request, status
+from neurons.miner.gateway.app import ChutesClient, DesearchClient, LightningRodClient, LunarCrushClient, NuminousIndiciaClient, NuminousSignalsClient, OpenAIClient, OpenRouterClient, PerplexityClient, UnusualWhalesClient, VericoreClient, app
+
+from crunch_node.config import CrunchNodeConfig
+
+config = CrunchNodeConfig()
+request_ctx: ContextVar[Request] = ContextVar("request_ctx")
+
+
+@app.middleware("http")
+async def set_request_context(request: Request, call_next):
+    token = request_ctx.set(request)
+    response = await call_next(request)
+    request_ctx.reset(token)
+    return response
+
+
+CLIENTS = {
+    "chutes": (ChutesClient, "CHUTES_API_KEY"),
+    "desearch": (DesearchClient, "DESEARCH_API_KEY"),
+    "lightning-rod": (LightningRodClient, "LIGHTNING_ROD_API_KEY"),
+    "lunar-crush": (LunarCrushClient, "LUNAR_CRUSH_API_KEY"),
+    "numinous-indicia": (NuminousIndiciaClient, None),
+    "numinous-signals": (NuminousSignalsClient, "NUMINOUS_SIGNALS_API_KEY"),
+    "openai": (OpenAIClient, "OPENAI_API_KEY"),
+    "openrouter": (OpenRouterClient, "OPENROUTER_API_KEY"),
+    "perplexity": (PerplexityClient, "PERPLEXITY_API_KEY"),
+    "unusual-whales": (UnusualWhalesClient, "UNUSUAL_WHALES_API_KEY"),
+    "vericore": (VericoreClient, "VERICORE_API_KEY"),
+}
+
+
+def patch_init(client_name: str, client_class: type):
+    original = client_class.__init__
+
+    def patched(self, **kwargs, ):
+        header_name = f"x-{client_name}-api-key"
+
+        api_key = request_ctx.get().headers.get(header_name)
+        if not api_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"{header_name} header is required for {client_name}",
+            )
+
+        kwargs["api_key"] = api_key
+        original(self, **kwargs)
+
+    return patched
+
+
+for client_name, (client_class, api_key_env_var) in CLIENTS.items():
+    if api_key_env_var is None:
+        continue
+
+    os.environ[api_key_env_var] = "invalid"
+
+    client_class.__init__ = patch_init(client_name, client_class)
+
+
+for route in app.router.routes:
+    match = re.match(r"/api/gateway/(.+?)/", route.path)
+    if not match:
+        continue
+
+    if True:
+        if route.openapi_extra is None:
+            route.openapi_extra = {}
+
+        client_name = match.group(1)
+        client_class, api_key_env_var = CLIENTS[client_name]
+
+        route.openapi_extra.setdefault("parameters", []).append({
+            "name": f"x-{client_name}-api-key",
+            "in": "header",
+            "required": True,
+            "schema": {"type": "string"},
+            "description": f"{client_name} API key header",
+        })
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
