@@ -22,6 +22,7 @@ from neurons.validator.models.agent_runs import AgentRunsModel, AgentRunStatus
 from neurons.validator.models.event import EventsModel
 from neurons.validator.models.prediction import PredictionsModel
 from neurons.validator.models.reasoning import MAX_REASONING_CHARS, MISSING_REASONING_PREFIX
+from neurons.validator.sandbox.manager import SandboxManager
 from neurons.validator.scheduler.task import AbstractTask
 from neurons.validator.utils.common.interval import get_interval_start_minutes
 from neurons.validator.utils.logger.logger import NuminousLogger
@@ -38,11 +39,13 @@ class RunModels(AbstractTask):
         interval_seconds: float,
         db_operations: DatabaseOperations,
         concurrent_runner: DynamicSubclassModelConcurrentRunner,
+        sandbox_manager: SandboxManager,
         logger: NuminousLogger,
     ):
         self.interval = interval_seconds
         self.db_operations = db_operations
         self.concurrent_runner = concurrent_runner
+        self.sandbox_manager = sandbox_manager
         self.logger = logger
 
     @property
@@ -265,7 +268,7 @@ class RunModels(AbstractTask):
     async def _store_result(
         self,
         event: EventsModel,
-        model_runner,
+        model_runner: ModelRunner,
         predict_result: ModelPredictResult,
         interval_start_minutes: int,
     ) -> AgentRunStatus:

@@ -14,7 +14,9 @@ import re
 from contextvars import ContextVar
 
 from fastapi import HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from neurons.miner.gateway.app import ChutesClient, DesearchClient, LightningRodClient, LunarCrushClient, NuminousIndiciaClient, NuminousSignalsClient, OpenAIClient, OpenRouterClient, PerplexityClient, UnusualWhalesClient, VericoreClient, app
+from neurons.validator.sandbox.signing_proxy.async_host import AsyncValidatorSigningProxy
 
 from crunch_node.config import CrunchNodeConfig
 
@@ -27,6 +29,41 @@ async def set_request_context(request: Request, call_next):
     token = request_ctx.set(request)
     response = await call_next(request)
     request_ctx.reset(token)
+    return response
+
+
+os.environ["RUN_REGISTRY_DIR"] = config.run_registry_dir
+path_validator = AsyncValidatorSigningProxy(
+    wallet=None,
+    proxy_upstream_url=None,
+    port=None,
+)
+
+
+@app.middleware("http")
+async def body_middleware(request: Request, call_next):
+    path = request.url.path
+    if not path.startswith("/api/gateway/"):
+        return await call_next(request)
+
+    if not request.method in ("POST", "PUT", "PATCH"):
+        return await call_next(request)
+
+    body = await request.body()
+
+    blocked = path_validator._check_track_access(path, body)
+    if blocked is not None:
+        return JSONResponse(
+            status_code=blocked.status,
+            content={"detail": blocked.text},
+        )
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request._receive = receive
+
+    response = await call_next(request)
     return response
 
 

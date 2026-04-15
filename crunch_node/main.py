@@ -4,18 +4,19 @@ numinous crunch-node entry point.
 Wires: config -> bt_compat mocks -> DB + PG + DynamicSubclassModelConcurrentRunner -> tasks -> scheduler
 """
 
-import asyncio
-import sqlite3
-import sys
-
 if True:
     # bt_compat MUST be imported before any neurons.validator.* module
     import crunch_node.bt_compat  # noqa: F401
+
+import asyncio
+import sqlite3
+import sys
 
 from model_runner_client.model_concurrent_runners import DynamicSubclassModelConcurrentRunner
 from model_runner_client.security.credentials import SecureCredentials
 from neurons.validator.db.client import DatabaseClient
 from neurons.validator.db.operations import DatabaseOperations
+from neurons.validator.sandbox import SandboxManager
 from neurons.validator.scheduler.tasks_scheduler import TasksScheduler
 from neurons.validator.tasks.db_cleaner import DbCleaner
 from neurons.validator.tasks.db_vacuum import DbVacuum
@@ -24,18 +25,20 @@ from neurons.validator.tasks.pull_events import PullEvents
 from neurons.validator.tasks.resolve_events import ResolveEvents
 from neurons.validator.utils.logger.logger import NuminousLogger, create_logger
 
+from crunch_node._logging import ExtraFormatter
 from crunch_node.bt_compat.numinous_client import CrunchNodeNuminousClient
+from crunch_node.bt_compat.sandbox_manager import CrunchNodeSandboxManager
 from crunch_node.bt_compat.scoring import CrunchNodeScoring
 from crunch_node.clients.pg_client import PgClient
 from crunch_node.config import CrunchNodeConfig
 from crunch_node.tasks.export_agent_run_logs_pg import ExportAgentRunLogsPg
-from crunch_node.tasks.export_events_pg import ExportEventsPg
 from crunch_node.tasks.export_agent_runs_pg import ExportAgentRunsPg
+from crunch_node.tasks.export_events_pg import ExportEventsPg
 from crunch_node.tasks.export_predictions_pg import ExportPredictionsPg
 from crunch_node.tasks.export_scores_pg import ExportScoresPg
 from crunch_node.tasks.register_models import RegisterModels
 from crunch_node.tasks.run_models import RunModels
-from crunch_node._logging import ExtraFormatter
+
 
 async def main():
     config = CrunchNodeConfig()
@@ -64,6 +67,11 @@ async def main():
         env=config.numinous_env,
         logger=logger,
         api_key=config.api_key,
+    )
+
+    sandbox_manager = CrunchNodeSandboxManager(
+        run_registry_dir=config.run_registry_dir,
+        logger=logger,
     )
 
     # Model Runner Client
@@ -119,6 +127,7 @@ async def main():
         interval_seconds=config.run_models_interval,
         db_operations=db_operations,
         concurrent_runner=concurrent_runner,
+        sandbox_manager=sandbox_manager,
         logger=logger,
     )
 

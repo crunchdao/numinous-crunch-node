@@ -35,6 +35,11 @@ class CrunchNodeConfig:
         )
     )
 
+    # Sandbox
+    run_registry_dir: str = field(
+        default_factory=lambda: os.getenv("RUN_REGISTRY_DIR", "./deployment/gateway/run_registry/")
+    )
+
     # Model Runner Client
     mrc_crunch_id: str = field(
         default_factory=lambda: os.environ["MRC_CRUNCH_ID"]
