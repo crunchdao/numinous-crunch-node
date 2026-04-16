@@ -11,6 +11,7 @@ if True:
 
 import os
 import re
+import json
 from contextvars import ContextVar
 
 from fastapi import HTTPException, Request, status
@@ -52,6 +53,7 @@ async def body_middleware(request: Request, call_next):
 
     body = await request.body()
 
+    # TODO: body is parsed twice into json...
     blocked = path_validator._check_track_access(path, body)
     if blocked is not None:
         return JSONResponse(
@@ -59,10 +61,19 @@ async def body_middleware(request: Request, call_next):
             content={"detail": blocked.text},
         )
 
-    async def receive():
-        return {"type": "http.request", "body": body, "more_body": False}
+    try:
+        parsed = json.loads(body)
+        run_id = parsed.get("run_id")
+    except (json.JSONDecodeError, AttributeError):
+        run_id = None
 
-    request._receive = receive
+    if run_id is not None and run_id.startswith("public-"):
+        run_id = "00000000-0000-0000-0000-000000000000"
+
+        parsed["run_id"] = run_id
+        body = json.dumps(parsed).encode()
+
+    request._body = body
 
     response = await call_next(request)
     return response
