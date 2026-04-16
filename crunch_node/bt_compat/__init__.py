@@ -22,12 +22,14 @@ for _mod in [
     "bittensor", "bittensor.core", "bittensor.core.config",
     "bittensor.core.metagraph", "bittensor.utils", "bittensor.utils.btlogging",
     "bittensor_wallet", "bittensor_wallet.wallet",
-    "docker", "docker.errors",
+    "docker", "docker.errors", "docker.types", "docker.models", "docker.models.containers",
 ]:
     sys.modules.setdefault(_mod, MagicMock())
 
 # DockerException must be a real exception class (used in except clauses)
 sys.modules["docker.errors"].DockerException = type("DockerException", (Exception,), {})
+sys.modules["docker.models.containers"].Container = type("Container", (object,), {})
+DockerClient = sys.modules["docker"].DockerClient = type("DockerClient", (object,), {})
 
 # Wallet must be the MagicMock CLASS (not an instance) so that
 # isinstance(MagicMock(), MagicMock) → True in NuminousClient.__init__

@@ -10,6 +10,16 @@ services:
       - ./deployment/model-orchestrator-local/config/:/app/config/
       - /var/run/docker.sock:/var/run/docker.sock
     privileged: true
+    entrypoint: ["/app/config/docker-entrypoint.sh"]
+    command:
+      [
+        "model-orchestrator",
+        "dev",
+        "--configuration-file",
+        "/app/config/orchestrator.dev.yml",
+        "--rebuild",
+        "if-code-modified"
+      ]
     restart: unless-stopped
     init: true
     ports:

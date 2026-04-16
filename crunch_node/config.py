@@ -35,6 +35,11 @@ class CrunchNodeConfig:
         )
     )
 
+    # Sandbox
+    run_registry_dir: str = field(
+        default_factory=lambda: os.getenv("RUN_REGISTRY_DIR", "./deployment/gateway/run_registry/")
+    )
+
     # Model Runner Client
     mrc_crunch_id: str = field(
         default_factory=lambda: os.environ["MRC_CRUNCH_ID"]
@@ -104,4 +109,13 @@ class CrunchNodeConfig:
     )
     run_models_timeout: int = field(
         default_factory=lambda: int(os.getenv("RUN_MODELS_TIMEOUT", "240"))
+    )
+    mrc_max_consecutive_timeouts: int = field(
+        default_factory=lambda: int(os.getenv("MRC_MAX_CONSECUTIVE_TIMEOUTS", "20"))
+    )
+    mrc_report_failure: bool = field(
+        default_factory=lambda: os.getenv("MRC_REPORT_FAILURE", "true").lower() == "true"
+    )
+    event_processing_cooldown: float = field(
+        default_factory=lambda: float(os.getenv("EVENT_PROCESSING_COOLDOWN", "3"))
     )
