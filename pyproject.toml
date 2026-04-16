@@ -22,6 +22,9 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "coloredlogs",
+    "requests",
+    "httpx",
+    "lru-dict",
 ]
 
 [project.scripts]

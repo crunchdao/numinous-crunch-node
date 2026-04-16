@@ -91,6 +91,7 @@ services:
     environment:
       <<: *worker-env
       NEW_RELIC_APP_NAME: "${NEW_RELIC_APP_NAME:-${COMPOSE_PROJECT_NAME}} (Gateway Worker)"
+      RUN_REGISTRY_DIR: /app/run_registry
     restart: always
     command: [
       "uvicorn",
@@ -102,6 +103,25 @@ services:
       - "${GATEWAY_PORT:-8090}:8090"
     volumes:
       - run-registry:/app/run_registry
+    networks: [ numinousnet ]
+
+  public-gateway-worker:
+    <<: *common-build
+    environment:
+      <<: *worker-env
+      NEW_RELIC_APP_NAME: "${NEW_RELIC_APP_NAME:-${COMPOSE_PROJECT_NAME}} (Public Gateway Worker)"
+      RUN_REGISTRY_DIR: /app/run_registry
+    restart: always
+    command: [
+      "uvicorn",
+      "crunch_node.workers.gateway_worker:app",
+      "--host", "0.0.0.0",
+      "--port", "8091"
+    ]
+    ports:
+      - "${PUBLIC_GATEWAY_PORT:-8091}:8091"
+    volumes:
+      - ./deployment/public-gateway:/app/run_registry:ro
     networks: [ numinousnet ]
 
 volumes:

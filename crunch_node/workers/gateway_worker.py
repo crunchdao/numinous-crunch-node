@@ -9,17 +9,17 @@ if True:
     # bt_compat MUST be imported before any neurons.validator.* module
     import crunch_node.bt_compat  # noqa: F401
 
+import json
 import os
 import re
-import json
 from contextvars import ContextVar
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from neurons.miner.gateway.app import ChutesClient, DesearchClient, LightningRodClient, LunarCrushClient, NuminousIndiciaClient, NuminousSignalsClient, OpenAIClient, OpenRouterClient, PerplexityClient, PublicDataProxyClient, UnusualWhalesClient, VericoreClient, app
 from neurons.miner.gateway.providers import public_data as public_data_provider
-from neurons.validator.sandbox.signing_proxy.async_host import AsyncValidatorSigningProxy
 
+from crunch_node.bt_compat.path_validator import CrunchNodeAsyncValidatorSigningProxy, UnknownRunIdException
 from crunch_node.config import CrunchNodeConfig
 
 config = CrunchNodeConfig()
@@ -34,11 +34,8 @@ async def set_request_context(request: Request, call_next):
     return response
 
 
-os.environ["RUN_REGISTRY_DIR"] = config.run_registry_dir
-path_validator = AsyncValidatorSigningProxy(
-    wallet=None,
-    proxy_upstream_url=None,
-    port=None,
+path_validator = CrunchNodeAsyncValidatorSigningProxy(
+    run_registry_dir=config.run_registry_dir
 )
 
 
@@ -54,7 +51,14 @@ async def body_middleware(request: Request, call_next):
     body = await request.body()
 
     # TODO: body is parsed twice into json...
-    blocked = path_validator._check_track_access(path, body)
+    try:
+        blocked = path_validator._check_track_access(path, body)
+    except UnknownRunIdException as exception:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": str(exception)},
+        )
+
     if blocked is not None:
         return JSONResponse(
             status_code=blocked.status,

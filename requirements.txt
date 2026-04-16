@@ -11,3 +11,7 @@ python-dotenv
 colorama
 fastapi
 uvicorn
+coloredlogs
+requests
+httpx
+lru-dict
