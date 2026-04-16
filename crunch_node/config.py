@@ -110,3 +110,6 @@ class CrunchNodeConfig:
     run_models_timeout: int = field(
         default_factory=lambda: int(os.getenv("RUN_MODELS_TIMEOUT", "240"))
     )
+    mrc_max_consecutive_timeouts: int = field(
+        default_factory=lambda: int(os.getenv("MRC_MAX_CONSECUTIVE_TIMEOUTS", "20"))
+    )

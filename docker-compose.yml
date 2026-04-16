@@ -23,6 +23,7 @@ x-worker-env: &worker-env
   MRC_PORT: ${MRC_PORT:-9091}
   MRC_BASE_CLASSNAME: ${MRC_BASE_CLASSNAME:?error}
   MRC_SECURE_CREDENTIALS_DIR: ${MRC_SECURE_CREDENTIALS_DIR:-}
+  RUN_REGISTRY_DIR: /app/run_registry
 
 x-common-build: &common-build
   build:
@@ -58,6 +59,7 @@ services:
     command: [ "python", "-m", "crunch_node.main" ]
     volumes:
       - main-worker-data:/app/data
+      - run-registry:/app/run_registry
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,38 +86,27 @@ services:
         condition: service_healthy
     networks: [ numinousnet ]
 
-  gateway-proxy:
-    build:
-      context: ../gateway
-    container_name: crunch-node-${CRUNCH_ID:-numinous}-gateway-proxy
-    restart: unless-stopped
+  gateway-worker:
+    <<: *common-build
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      CHUTES_API_KEY: ${CHUTES_API_KEY:-}
-      DESEARCH_API_KEY: ${DESEARCH_API_KEY:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
-      RATE_LIMIT_PER_SECOND: ${RATE_LIMIT_PER_SECOND:-10}
-      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-20}
-      ALLOWED_MODELS_OPENAI: ${ALLOWED_MODELS_OPENAI:-}
-      ALLOWED_MODELS_CHUTES: ${ALLOWED_MODELS_CHUTES:-}
-      ALLOWED_MODELS_DESEARCH: ${ALLOWED_MODELS_DESEARCH:-}
-      ALLOWED_MODELS_OPENROUTER: ${ALLOWED_MODELS_OPENROUTER:-}
-      ALLOWED_ENDPOINTS_DESEARCH: ${ALLOWED_ENDPOINTS_DESEARCH:-}
+      <<: *worker-env
+      NEW_RELIC_APP_NAME: "${NEW_RELIC_APP_NAME:-${COMPOSE_PROJECT_NAME}} (Gateway Worker)"
+    restart: always
+    command: [
+      "uvicorn",
+      "crunch_node.workers.gateway_worker:app",
+      "--host", "0.0.0.0",
+      "--port", "8090"
+    ]
     ports:
       - "${GATEWAY_PORT:-8090}:8090"
     volumes:
-      - ../logs/gateway:/app/logs
-    networks: [external]
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 128M
+      - run-registry:/app/run_registry
+    networks: [ numinousnet ]
 
 volumes:
   main-worker-data:
+  run-registry:
 
 networks:
   numinousnet:

@@ -22,6 +22,7 @@ from neurons.validator.models.agent_runs import AgentRunsModel, AgentRunStatus
 from neurons.validator.models.event import EventsModel
 from neurons.validator.models.prediction import PredictionsModel
 from neurons.validator.models.reasoning import MAX_REASONING_CHARS, MISSING_REASONING_PREFIX
+from neurons.validator.models.track import TrackEnum
 from neurons.validator.sandbox.manager import SandboxManager
 from neurons.validator.scheduler.task import AbstractTask
 from neurons.validator.utils.common.interval import get_interval_start_minutes
@@ -31,6 +32,10 @@ from crunch_node.tasks.register_models import map_miner_properties, to_miner_pro
 
 TITLE_SEPARATOR = " ==Further Information==: "
 MAX_LOG_CHARS = 25_000
+
+# SIGNAL first: prevents models from caching MAIN results (full API access)
+# and reusing them during the SIGNAL run (restricted access).
+TRACK_ORDER = [TrackEnum.SIGNAL, TrackEnum.MAIN]
 
 
 class RunModels(AbstractTask):
@@ -80,13 +85,9 @@ class RunModels(AbstractTask):
         }
 
     @staticmethod
-    def _model_infos(model: ModelRunner) -> tuple[int, str, str, str]:
-        """Extract (miner_uid, miner_hotkey, track, version_id) from a ModelRunner."""
-        track = "MAIN"  # TODO manage the track
-
-        miner_uid, miner_hotkey, version_id = map_miner_properties(model)
-
-        return miner_uid, miner_hotkey, track, version_id
+    def _model_infos(model: ModelRunner) -> tuple[int, str, str]:
+        """Extract (miner_uid, miner_hotkey, version_id) from a ModelRunner."""
+        return map_miner_properties(model)
 
     async def run(self) -> None:
         events = await self.db_operations.get_events_to_predict()
@@ -132,21 +133,50 @@ class RunModels(AbstractTask):
                 await asyncio.sleep(wait_time)
 
     async def _process_event(self, event: EventsModel, interval_start_minutes: int) -> None:
-        """Process a single event: pre-filter models, call via concurrent_runner, store results."""
+        """Process a single event across all its tracks (SIGNAL first, then MAIN)."""
+        models = self.concurrent_runner.model_cluster.models_run
+
+        # Resolve tracks: SIGNAL first to prevent caching leaks from MAIN
+        event_tracks = {TrackEnum(t) if isinstance(t, str) else t for t in event.tracks}
+        tracks = [t for t in TRACK_ORDER if t in event_tracks]
+        if not tracks:
+            tracks = [TrackEnum.MAIN]
+
+        total_counts = {"success": 0, "failed": 0, "timeout": 0}
+        for track in tracks:
+            counts = await self._process_event_track(event, track, interval_start_minutes)
+            for k in total_counts:
+                total_counts[k] += counts[k]
+
+        absent_count = await self._mark_absent_miners(event, models, tracks)
+
+        self.logger.info(
+            "Processed event",
+            extra={
+                "event_id": event.unique_event_id,
+                "tracks": [t.value for t in tracks],
+                **total_counts,
+                "absent_count": absent_count,
+            },
+        )
+
+    async def _process_event_track(
+        self, event: EventsModel, track: TrackEnum, interval_start_minutes: int
+    ) -> dict:
+        """Process a single (event, track) pair: filter models, call, store results."""
         models = self.concurrent_runner.model_cluster.models_run
         event_id = event.unique_event_id
         models_to_call = []
 
-        # Pre-check: skip/replicate existing predictions, collect models that need a call
         for model in models.values():
-            miner_uid, miner_hotkey, track, version_id = self._model_infos(model)
+            miner_uid, miner_hotkey, version_id = self._model_infos(model)
 
             existing_prediction = (
                 await self.db_operations.get_latest_prediction_for_event_and_miner(
                     unique_event_id=event_id,
                     miner_uid=miner_uid,
                     miner_hotkey=miner_hotkey,
-                    track=track,
+                    track=track.value,
                 )
             )
 
@@ -154,7 +184,7 @@ class RunModels(AbstractTask):
                 if existing_prediction.interval_start_minutes == interval_start_minutes:
                     self.logger.debug(
                         "Skipping — prediction exists",
-                        extra={"event_id": event_id, "miner_uid": miner_uid},
+                        extra={"event_id": event_id, "miner_uid": miner_uid, "track": track.value},
                     )
                     continue
 
@@ -163,7 +193,7 @@ class RunModels(AbstractTask):
                     unique_event_id=event_id,
                     miner_uid=miner_uid,
                     miner_hotkey=miner_hotkey,
-                    track=track,
+                    track=track.value,
                     latest_prediction=existing_prediction.latest_prediction,
                     interval_start_minutes=interval_start_minutes,
                     interval_agg_prediction=existing_prediction.latest_prediction,
@@ -177,65 +207,62 @@ class RunModels(AbstractTask):
             models_to_call.append(model)
 
         if not models_to_call:
-            return
+            return {"success": 0, "failed": 0, "timeout": 0}
 
-        # Call all models concurrently via the runner (uses asyncio.gather internally)
         event_data = self._build_event_data(event)
-        results = await self.concurrent_runner.call(
-            method_name="feed_update_and_predict",
-            arguments=(
-                [
-                    Argument(
-                        position=1,
-                        data=Variant(
-                            type=VariantType.JSON,
-                            value=encode_data(VariantType.JSON, event_data),
-                        ),
-                    )
-                ],
+
+        # Register a unique run_id per model for track filtering
+        model_run_ids: dict[int, str] = {}
+        for model in models_to_call:
+            run_id = str(uuid.uuid4())
+            model_run_ids[id(model)] = run_id
+            self.sandbox_manager.register_run(run_id, track)
+
+        def prepare_args(model_runner: ModelRunner):
+            data = {**event_data, "run_id": model_run_ids[id(model_runner)], "track": track.value}
+            return (
+                [Argument(position=1, data=Variant(type=VariantType.JSON, value=encode_data(VariantType.JSON, data)))],
                 [],
-            ),
-            model_runs=models_to_call,
-        )
+            )
 
-        # Process results
         counts = {"success": 0, "failed": 0, "timeout": 0}
-        for model_runner, predict_result in results.items():
-            status = await self._store_result(event, model_runner, predict_result, interval_start_minutes)
-            if status == AgentRunStatus.SUCCESS:
-                counts["success"] += 1
-            elif status == AgentRunStatus.SANDBOX_TIMEOUT:
-                counts["timeout"] += 1
-            else:
-                counts["failed"] += 1
+        try:
+            results = await self.concurrent_runner.call(
+                method_name="feed_update_and_predict",
+                arguments=prepare_args,
+                model_runs=models_to_call,
+            )
 
-        # Mark absent miners who sit out
-        absent_count = await self._mark_absent_miners(event, models)
+            for model_runner, predict_result in results.items():
+                status = await self._store_result(
+                    event, model_runner, predict_result, interval_start_minutes, track
+                )
+                if status == AgentRunStatus.SUCCESS:
+                    counts["success"] += 1
+                elif status == AgentRunStatus.SANDBOX_TIMEOUT:
+                    counts["timeout"] += 1
+                else:
+                    counts["failed"] += 1
+        finally:
+            for run_id in model_run_ids.values():
+                self.sandbox_manager.unregister_run(run_id)
 
-        self.logger.info(
-            "Processed event",
-            extra={
-                "event_id": event_id,
-                **counts,
-                "absent_count": absent_count
-            }
-        )
+        return counts
 
     async def _mark_absent_miners(
         self,
         event: EventsModel,
         active_models: dict,
+        tracks: list[TrackEnum],
     ) -> int:
         """Create failed runs for registered miners whose model is not in models_run."""
         event_id = event.unique_event_id
 
-        # Build set of currently active (miner_uid, miner_hotkey)
         active_keys = set()
         for model in active_models.values():
-            miner_uid, _, _, _ = self._model_infos(model)
+            miner_uid, _, _ = self._model_infos(model)
             active_keys.add(miner_uid)
 
-        # Get all registered miners from DB
         all_miners = await self.db_operations.get_miners_last_registration()
         if not all_miners:
             return 0
@@ -248,20 +275,21 @@ class RunModels(AbstractTask):
 
             miner_hotkey, version_id = to_miner_properties(int(miner.miner_uid))
 
-            run_id = str(uuid.uuid4())
-            agent_run = AgentRunsModel(
-                run_id=run_id,
-                unique_event_id=event_id,
-                agent_version_id=version_id,
-                miner_uid=miner_uid,
-                miner_hotkey=miner_hotkey,
-                track=event.tracks[0] if event.tracks else "MAIN",
-                status=AgentRunStatus.INTERNAL_AGENT_ERROR,
-                exported=False,
-                is_final=True,
-            )
-            await self.db_operations.upsert_agent_runs([agent_run])
-            absent_count += 1
+            for track in tracks:
+                run_id = str(uuid.uuid4())
+                agent_run = AgentRunsModel(
+                    run_id=run_id,
+                    unique_event_id=event_id,
+                    agent_version_id=version_id,
+                    miner_uid=miner_uid,
+                    miner_hotkey=miner_hotkey,
+                    track=track.value,
+                    status=AgentRunStatus.INTERNAL_AGENT_ERROR,
+                    exported=False,
+                    is_final=True,
+                )
+                await self.db_operations.upsert_agent_runs([agent_run])
+                absent_count += 1
 
         return absent_count
 
@@ -271,9 +299,10 @@ class RunModels(AbstractTask):
         model_runner: ModelRunner,
         predict_result: ModelPredictResult,
         interval_start_minutes: int,
+        track: TrackEnum,
     ) -> AgentRunStatus:
         """Store agent run, logs, reasoning and prediction from a ModelPredictResult."""
-        miner_uid, miner_hotkey, track, version_id = self._model_infos(model_runner)
+        miner_uid, miner_hotkey, version_id = self._model_infos(model_runner)
         event_id = event.unique_event_id
 
         prediction_value = None
@@ -334,7 +363,7 @@ class RunModels(AbstractTask):
             agent_version_id=version_id,
             miner_uid=miner_uid,
             miner_hotkey=miner_hotkey,
-            track=track,
+            track=track.value,
             status=status,
             exported=False,
             is_final=True,
@@ -367,7 +396,7 @@ class RunModels(AbstractTask):
                 unique_event_id=event_id,
                 miner_uid=miner_uid,
                 miner_hotkey=miner_hotkey,
-                track=track,
+                track=track.value,
                 latest_prediction=clipped,
                 interval_start_minutes=interval_start_minutes,
                 interval_agg_prediction=clipped,

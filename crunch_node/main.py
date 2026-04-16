@@ -86,6 +86,7 @@ async def main():
         port=config.mrc_port,
         base_classname=config.mrc_base_classname,
         secure_credentials=secure_credentials,
+        max_consecutive_timeouts=config.mrc_max_consecutive_timeouts,
     )
 
     await concurrent_runner.init()
