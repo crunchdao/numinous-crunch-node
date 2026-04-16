@@ -3,7 +3,7 @@ models:
 
     # submission code id, it is the code used to run the model
     # the corresponding directory must exist in the storage
-  submission_id: crunch-numinous-benchmarktracker
+  submission_id: numinous-benchmarktracker
 
     # which crunch this model must be run on
   crunch_id: numinous
