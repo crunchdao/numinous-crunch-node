@@ -46,12 +46,14 @@ class RunModels(AbstractTask):
         concurrent_runner: DynamicSubclassModelConcurrentRunner,
         sandbox_manager: SandboxManager,
         logger: NuminousLogger,
+        event_processing_cooldown: float = 0,
     ):
         self.interval = interval_seconds
         self.db_operations = db_operations
         self.concurrent_runner = concurrent_runner
         self.sandbox_manager = sandbox_manager
         self.logger = logger
+        self.event_processing_cooldown = event_processing_cooldown
 
     @property
     def name(self) -> str:
@@ -119,7 +121,7 @@ class RunModels(AbstractTask):
             ended_at = time()
             took = ended_at - started_at
 
-            wait_time = max(0.0, self.concurrent_runner.timeout - took)
+            wait_time = max(0.0, self.event_processing_cooldown - took)
             if wait_time > 0:
                 self.logger.info(
                     "Waiting before next event",

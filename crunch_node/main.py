@@ -87,6 +87,7 @@ async def main():
         base_classname=config.mrc_base_classname,
         secure_credentials=secure_credentials,
         max_consecutive_timeouts=config.mrc_max_consecutive_timeouts,
+        report_failure=config.mrc_report_failure,
     )
 
     await concurrent_runner.init()
@@ -130,6 +131,7 @@ async def main():
         concurrent_runner=concurrent_runner,
         sandbox_manager=sandbox_manager,
         logger=logger,
+        event_processing_cooldown=config.event_processing_cooldown,
     )
 
     scoring_task = CrunchNodeScoring(

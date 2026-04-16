@@ -113,3 +113,9 @@ class CrunchNodeConfig:
     mrc_max_consecutive_timeouts: int = field(
         default_factory=lambda: int(os.getenv("MRC_MAX_CONSECUTIVE_TIMEOUTS", "20"))
     )
+    mrc_report_failure: bool = field(
+        default_factory=lambda: os.getenv("MRC_REPORT_FAILURE", "true").lower() == "true"
+    )
+    event_processing_cooldown: float = field(
+        default_factory=lambda: float(os.getenv("EVENT_PROCESSING_COOLDOWN", "3"))
+    )
