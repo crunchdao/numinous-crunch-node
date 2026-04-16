@@ -16,6 +16,8 @@ from contextvars import ContextVar
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from lru import LRU
+from neurons.miner.gateway import cache as gateway_cache
 from neurons.miner.gateway.app import ChutesClient, DesearchClient, LightningRodClient, LunarCrushClient, NuminousIndiciaClient, NuminousSignalsClient, OpenAIClient, OpenRouterClient, PerplexityClient, PublicDataProxyClient, UnusualWhalesClient, VericoreClient, app
 from neurons.miner.gateway.providers import public_data as public_data_provider
 
@@ -140,7 +142,7 @@ def patched_data_get_api_key_for_source(source: public_data_provider.PublicDataS
 
 
 public_data_provider._get_api_key_for_source = patched_data_get_api_key_for_source
-
+gateway_cache._cache = LRU(10_000)
 
 for route in app.router.routes:
     match = re.match(r"/api/gateway/(.+?)/", route.path)
