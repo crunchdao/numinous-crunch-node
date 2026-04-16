@@ -228,7 +228,7 @@ class RunModels(AbstractTask):
         counts = {"success": 0, "failed": 0, "timeout": 0}
         try:
             results = await self.concurrent_runner.call(
-                method_name="feed_update_and_predict",
+                method_name="predict",
                 arguments=prepare_args,
                 model_runs=models_to_call,
             )
