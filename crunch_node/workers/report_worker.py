@@ -6,7 +6,6 @@ and exposes them via REST endpoints.
 """
 
 from contextlib import asynccontextmanager
-from typing import TypedDict
 
 import asyncpg
 from fastapi import FastAPI
@@ -88,64 +87,17 @@ async def get_agent_runs(
     return [dict(r) for r in rows]
 
 
-class LeaderboardEntry(TypedDict):
-    model_id: int
-    rank: int | None
-    brier_score: float
-    event_count: int
-
-
 @app.get("/leaderboard")
-async def get_leaderboard(
-    max_event_count: int | None = None,
-) -> list[LeaderboardEntry]:
-    max_event_count = max_event_count or 101
-
+async def get_leaderboard():
     rows = await _pool.fetch(
         """
-            SELECT
-                miner_uid,
-                COUNT(*)         AS event_count,
-                AVG(event_score) AS avg_score
-            FROM (
-                SELECT
-                    miner_uid,
-                    event_score,
-                    ROW_NUMBER() OVER (PARTITION BY miner_uid ORDER BY scored_at DESC) AS rn
-                FROM public.scores
-            ) ranked
-            WHERE rn <= $1
-            GROUP BY miner_uid
-            ORDER BY miner_uid
-        """,
-        *[
-            max_event_count,
-        ]
+        SELECT miner_uid, track, rank, weighted_score,
+               event_count, global_brier, geopolitics_brier, reasoning, computed_at
+        FROM leaderboard
+        ORDER BY track, rank
+        """
     )
-
-    entries = []
-    for row in rows:
-        model_id = row["miner_uid"]
-
-        score = row["avg_score"]
-        if score is not None:
-            entries.append({
-                "model_id": model_id,
-                "rank": None,
-                "brier_score": score,
-                "event_count": row["event_count"],
-            })
-
-    entries.sort(key=lambda x: (
-        -x["event_count"],
-        x["brier_score"],
-    ))
-
-    for rank, entry in enumerate(entries, start=1):
-        if entry["event_count"] == max_event_count:
-            entry["rank"] = rank
-
-    return entries
+    return [dict(r) for r in rows]
 
 
 if __name__ == "__main__":

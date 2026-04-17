@@ -119,3 +119,22 @@ class CrunchNodeConfig:
     event_processing_cooldown: float = field(
         default_factory=lambda: float(os.getenv("EVENT_PROCESSING_COOLDOWN", "3"))
     )
+
+    # OpenAI (reasoning scoring)
+    openai_api_key: str = field(
+        default_factory=lambda: os.getenv("OPENAI_API_KEY", "")
+    )
+    openai_model: str = field(
+        default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-5.4")
+    )
+
+    # Reasoning scoring + leaderboard intervals
+    score_reasoning_interval: float = field(
+        default_factory=lambda: float(os.getenv("SCORE_REASONING_INTERVAL", "300.0"))
+    )
+    export_reasoning_interval: float = field(
+        default_factory=lambda: float(os.getenv("EXPORT_REASONING_INTERVAL", "373.0"))
+    )
+    compute_leaderboard_interval: float = field(
+        default_factory=lambda: float(os.getenv("COMPUTE_LEADERBOARD_INTERVAL", "600.0"))
+    )

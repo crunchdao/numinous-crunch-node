@@ -105,6 +105,22 @@ services:
       - run-registry:/app/run_registry
     networks: [ numinousnet ]
 
+  scoring-worker:
+    <<: *common-build
+    environment:
+      <<: *worker-env
+      NEW_RELIC_APP_NAME: "${NEW_RELIC_APP_NAME:-${COMPOSE_PROJECT_NAME}} (Scoring Worker)"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?error}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      SCORE_REASONING_INTERVAL: ${SCORE_REASONING_INTERVAL:-300}
+      COMPUTE_LEADERBOARD_INTERVAL: ${COMPUTE_LEADERBOARD_INTERVAL:-600}
+    restart: always
+    command: [ "python", "-m", "crunch_node.workers.scoring_worker" ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [ numinousnet ]
+
   public-gateway-worker:
     <<: *common-build
     environment:
