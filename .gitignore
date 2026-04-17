@@ -12,3 +12,4 @@ build/
 .pytest_cache/
 deployment/postgres/data/
 deployment/model-orchestrator-local/data/
+certs/

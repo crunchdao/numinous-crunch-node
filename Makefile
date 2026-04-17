@@ -8,7 +8,11 @@ SERVICES ?=
 
 BACKEND_SERVICES = \
     main-worker \
-    report-worker
+    report-worker \
+    scoring-worker \
+    gateway-worker \
+    public-gateway-worker
+
 
 IS_ALL := $(filter all,$(MAKECMDGOALS))
 IS_DEV := $(filter dev,$(MAKECMDGOALS))
@@ -65,9 +69,9 @@ endif
 ## Logs (follow)
 logs:
 ifneq ($(SERVICES),)
-	docker compose $(COMPOSE_FILES) logs -f $(SERVICES)
+	docker compose $(COMPOSE_FILES) logs -f $(SERVICES) --tail 1000
 else
-	docker compose $(COMPOSE_FILES) logs -f
+	docker compose $(COMPOSE_FILES) logs -f --tail 1000
 endif
 
 ## Stop & remove

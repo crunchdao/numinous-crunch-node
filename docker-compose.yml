@@ -23,6 +23,8 @@ x-worker-env: &worker-env
   MRC_PORT: ${MRC_PORT:-9091}
   MRC_BASE_CLASSNAME: ${MRC_BASE_CLASSNAME:?error}
   MRC_SECURE_CREDENTIALS_DIR: ${MRC_SECURE_CREDENTIALS_DIR:-}
+  MRC_REPORT_FAILURE: ${MRC_REPORT_FAILURE:-true}
+  EVENT_PROCESSING_COOLDOWN: ${EVENT_PROCESSING_COOLDOWN:-3}
   RUN_REGISTRY_DIR: /app/run_registry
 
 x-common-build: &common-build
@@ -58,7 +60,8 @@ services:
     restart: always
     command: [ "python", "-m", "crunch_node.main" ]
     volumes:
-      - main-worker-data:/app/data
+      - ./certs:/app/certs
+      - ./deployment/main-worker/data/:/app/data
       - run-registry:/app/run_registry
     depends_on:
       postgres:
@@ -137,11 +140,10 @@ services:
     ports:
       - "${PUBLIC_GATEWAY_PORT:-8091}:8091"
     volumes:
-      - ./deployment/public-gateway:/app/run_registry:ro
+      - ./deployment/public-gateway/run_registry/:/app/run_registry:ro
     networks: [ numinousnet ]
 
 volumes:
-  main-worker-data:
   run-registry:
 
 networks:
