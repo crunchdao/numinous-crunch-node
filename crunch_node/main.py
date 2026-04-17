@@ -31,7 +31,9 @@ from crunch_node.bt_compat.sandbox_manager import CrunchNodeSandboxManager
 from crunch_node.bt_compat.scoring import CrunchNodeScoring
 from crunch_node.clients.pg_client import PgClient
 from crunch_node.config import CrunchNodeConfig
+from crunch_node.migrations import CustomMigrations
 from crunch_node.tasks.export_agent_run_logs_pg import ExportAgentRunLogsPg
+from crunch_node.tasks.export_reasoning_pg import ExportReasoningPg
 from crunch_node.tasks.export_agent_runs_pg import ExportAgentRunsPg
 from crunch_node.tasks.export_events_pg import ExportEventsPg
 from crunch_node.tasks.export_predictions_pg import ExportPredictionsPg
@@ -54,9 +56,7 @@ async def main():
     await db_client.migrate()
 
     # Custom migrations on top of submodule's alembic
-    columns = await db_client.many("PRAGMA table_info(events)")
-    if not any(col[1] == "pg_exported" for col in columns):
-        await db_client.update("ALTER TABLE events ADD COLUMN pg_exported INTEGER DEFAULT 0")
+    await CustomMigrations(db_client).run()
 
     # PostgreSQL
     pg_client = PgClient(dsn=config.pg_dsn)
@@ -182,6 +182,14 @@ async def main():
         logger=logger,
     )
 
+    export_reasoning_task = ExportReasoningPg(
+        interval_seconds=config.export_reasoning_interval,
+        batch_size=config.export_batch_size,
+        db_operations=db_operations,
+        pg_client=pg_client,
+        logger=logger,
+    )
+
     db_cleaner_task = DbCleaner(
         interval_seconds=config.db_cleaner_interval,
         db_operations=db_operations,
@@ -211,6 +219,7 @@ async def main():
     scheduler.add(task=export_agent_runs_task)
     scheduler.add(task=export_events_task)
     scheduler.add(task=export_agent_run_logs_task)
+    scheduler.add(task=export_reasoning_task)
     scheduler.add(task=db_cleaner_task)
     scheduler.add(task=vacuum_task)
 

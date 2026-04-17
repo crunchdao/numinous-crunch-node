@@ -1,5 +1,6 @@
 """Minimal asyncpg PostgreSQL client with connection pooling."""
 
+from contextlib import asynccontextmanager
 from typing import Any
 
 import asyncpg
@@ -30,6 +31,13 @@ class PgClient:
     async def fetchrow(self, query: str, *args: Any) -> asyncpg.Record | None:
         async with self._pool.acquire() as conn:
             return await conn.fetchrow(query, *args)
+
+    @asynccontextmanager
+    async def transaction(self):
+        """Yield a connection with an active transaction."""
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                yield conn
 
     async def close(self) -> None:
         if self._pool:

@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS scores (
     spec_version      INTEGER,
     outcome           DOUBLE PRECISION,
     scored_at         TIMESTAMPTZ,
+    reasoning_scores  JSONB,
     PRIMARY KEY (event_id, miner_uid, track)
 );
 
@@ -63,4 +64,35 @@ CREATE TABLE IF NOT EXISTS agent_run_logs (
     log_content       TEXT,
     created_at        TIMESTAMPTZ,
     updated_at        TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS reasoning (
+    run_id            TEXT PRIMARY KEY,
+    unique_event_id   TEXT NOT NULL,
+    miner_uid         INTEGER NOT NULL,
+    track             TEXT NOT NULL,
+    reasoning         TEXT,
+    reasoning_scored  BOOLEAN DEFAULT FALSE,
+    created_at        TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS model_scores (
+    miner_uid         INTEGER PRIMARY KEY,
+    weighted_scores   JSONB,
+    scores_by_pool    JSONB,
+    computed_at       TIMESTAMPTZ
+);
+-- weighted_scores: {"MAIN": 0.23, "SIGNAL": 0.18}
+
+CREATE TABLE IF NOT EXISTS leaderboard (
+    miner_uid         INTEGER NOT NULL,
+    track             TEXT NOT NULL,
+    rank              INTEGER NOT NULL,
+    weighted_score    DOUBLE PRECISION,
+    event_count       INTEGER,
+    global_brier      DOUBLE PRECISION,
+    geopolitics_brier DOUBLE PRECISION,
+    reasoning         DOUBLE PRECISION,
+    computed_at       TIMESTAMPTZ,
+    PRIMARY KEY (miner_uid, track)
 );
