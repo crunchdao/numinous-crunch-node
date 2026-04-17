@@ -5,6 +5,10 @@ and leaderboard computation against PostgreSQL.
 Runs independently from the main coordinator node.
 """
 
+if True:
+    # bt_compat MUST be imported before any neurons.validator.* module
+    import crunch_node.bt_compat  # noqa: F401
+
 import asyncio
 
 from neurons.validator.utils.logger.logger import NuminousLogger, create_logger
