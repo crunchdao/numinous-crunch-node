@@ -85,14 +85,16 @@ CREATE TABLE IF NOT EXISTS model_scores (
 -- weighted_scores: {"MAIN": 0.23, "SIGNAL": 0.18}
 
 CREATE TABLE IF NOT EXISTS leaderboard (
-    miner_uid         INTEGER NOT NULL,
-    track             TEXT NOT NULL,
-    rank              INTEGER NOT NULL,
-    weighted_score    DOUBLE PRECISION,
-    event_count       INTEGER,
-    global_brier      DOUBLE PRECISION,
-    geopolitics_brier DOUBLE PRECISION,
-    reasoning         DOUBLE PRECISION,
-    computed_at       TIMESTAMPTZ,
+    miner_uid              INTEGER NOT NULL,
+    track                  TEXT NOT NULL,
+    rank                   INTEGER NOT NULL,
+    weighted_score         DOUBLE PRECISION,
+    event_count            INTEGER,
+    global_brier           DOUBLE PRECISION,
+    global_brier_count     INTEGER,
+    geopolitics_brier      DOUBLE PRECISION,
+    geopolitics_brier_count INTEGER,
+    reasoning              DOUBLE PRECISION,
+    computed_at            TIMESTAMPTZ,
     PRIMARY KEY (miner_uid, track)
 );

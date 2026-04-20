@@ -52,7 +52,9 @@ class LeaderboardEntry:
     weighted_score: float | None
     event_count: int
     global_brier: float | None
+    global_brier_count: int
     geopolitics_brier: float | None
+    geopolitics_brier_count: int
     reasoning: float | None
 
 
@@ -281,16 +283,20 @@ class ScoringService:
                     weighted_score=weighted.get(track),
                     event_count=sum(p["event_count"] for p in track_pools),
                     global_brier=next((p["rolling_avg"] for p in track_pools if p["pool"] == "global_brier"), None),
+                    global_brier_count=next((p["event_count"] for p in track_pools if p["pool"] == "global_brier"), 0),
                     geopolitics_brier=next((p["rolling_avg"] for p in track_pools if p["pool"] == "geopolitics_brier"), None),
+                    geopolitics_brier_count=next((p["event_count"] for p in track_pools if p["pool"] == "geopolitics_brier"), 0),
                     reasoning=next((p["rolling_avg"] for p in track_pools if p["pool"] == "reasoning"), None),
                 ))
 
         rows = []
         for track, entries in by_track.items():
-            entries.sort(key=lambda e: e.weighted_score if e.weighted_score is not None else float("inf"))
+            entries.sort(key=lambda e: (e.weighted_score if e.weighted_score is not None else float("inf"), -e.event_count))
             for rank, e in enumerate(entries, 1):
                 rows.append((e.miner_uid, track, rank, e.weighted_score, e.event_count,
-                             e.global_brier, e.geopolitics_brier, e.reasoning, now))
+                             e.global_brier, e.global_brier_count,
+                             e.geopolitics_brier, e.geopolitics_brier_count,
+                             e.reasoning, now))
 
         async with self.pg_client.transaction() as conn:
             await conn.execute("DELETE FROM leaderboard")
@@ -298,8 +304,10 @@ class ScoringService:
                 await conn.executemany(
                     """
                     INSERT INTO leaderboard (miner_uid, track, rank, weighted_score,
-                        event_count, global_brier, geopolitics_brier, reasoning, computed_at)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                        event_count, global_brier, global_brier_count,
+                        geopolitics_brier, geopolitics_brier_count,
+                        reasoning, computed_at)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                     """,
                     rows,
                 )

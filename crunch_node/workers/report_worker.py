@@ -92,7 +92,8 @@ async def get_leaderboard():
     rows = await _pool.fetch(
         """
         SELECT miner_uid, track, rank, weighted_score,
-               event_count, global_brier, geopolitics_brier, reasoning, computed_at
+               event_count, global_brier, global_brier_count,
+               geopolitics_brier, geopolitics_brier_count, reasoning, computed_at
         FROM leaderboard
         ORDER BY track, rank
         """
