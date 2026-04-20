@@ -10,11 +10,16 @@ class CustomMigrations:
         self.db_client = db_client
 
     async def run(self) -> None:
-        await self._add_pg_exported_column()
+        await self._add_pg_exported_status_column()
 
-    async def _add_pg_exported_column(self) -> None:
+    async def _add_pg_exported_status_column(self) -> None:
         columns = await self.db_client.many("PRAGMA table_info(events)")
-        if not any(col[1] == "pg_exported" for col in columns):
+        col_names = [col[1] for col in columns]
+        if "pg_exported" in col_names:
             await self.db_client.update(
-                "ALTER TABLE events ADD COLUMN pg_exported INTEGER DEFAULT 0"
+                "ALTER TABLE events RENAME COLUMN pg_exported TO pg_exported_status"
+            )
+        elif "pg_exported_status" not in col_names:
+            await self.db_client.update(
+                "ALTER TABLE events ADD COLUMN pg_exported_status INTEGER DEFAULT 0"
             )
