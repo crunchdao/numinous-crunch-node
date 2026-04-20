@@ -49,7 +49,7 @@ class RollingScore:
 @dataclass
 class LeaderboardEntry:
     miner_uid: int
-    weighted_score: float
+    weighted_score: float | None
     event_count: int
     global_brier: float | None
     geopolitics_brier: float | None
@@ -269,12 +269,16 @@ class ScoringService:
         for entry in model_score_entries:
             miner_uid = entry["miner_uid"]
             pools = entry["scores_by_pool"]
+            weighted = entry["weighted_scores"]
 
-            for track, w_score in entry["weighted_scores"].items():
+            # Collect all tracks this miner has data for
+            tracks_seen = {p["track"] for p in pools if p["event_count"] > 0}
+
+            for track in tracks_seen:
                 track_pools = [p for p in pools if p["track"] == track]
                 by_track.setdefault(track, []).append(LeaderboardEntry(
                     miner_uid=miner_uid,
-                    weighted_score=w_score,
+                    weighted_score=weighted.get(track),
                     event_count=sum(p["event_count"] for p in track_pools),
                     global_brier=next((p["rolling_avg"] for p in track_pools if p["pool"] == "global_brier"), None),
                     geopolitics_brier=next((p["rolling_avg"] for p in track_pools if p["pool"] == "geopolitics_brier"), None),
@@ -283,7 +287,7 @@ class ScoringService:
 
         rows = []
         for track, entries in by_track.items():
-            entries.sort(key=lambda e: e.weighted_score)
+            entries.sort(key=lambda e: e.weighted_score if e.weighted_score is not None else float("inf"))
             for rank, e in enumerate(entries, 1):
                 rows.append((e.miner_uid, track, rank, e.weighted_score, e.event_count,
                              e.global_brier, e.geopolitics_brier, e.reasoning, now))
