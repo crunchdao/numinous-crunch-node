@@ -12,9 +12,9 @@ from typing import List
 import asyncpg
 from fastapi import FastAPI, HTTPException, Query
 
-from neurons.validator.models.event import EventStatus
-
 from crunch_node.config import CrunchNodeConfig
+
+_EVENT_STATUS_PENDING = 2
 
 config = CrunchNodeConfig()
 _pool: asyncpg.Pool | None = None
@@ -135,7 +135,7 @@ async def get_model_active_events(
         WHERE e.status = $3
         ORDER BY e.cutoff ASC, p.track
         """,
-        miner_uids, track, EventStatus.PENDING.value,
+        miner_uids, track, _EVENT_STATUS_PENDING,
     )
     return [dict(r) for r in rows]
 
