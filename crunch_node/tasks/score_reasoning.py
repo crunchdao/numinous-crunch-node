@@ -15,6 +15,7 @@ from pathlib import Path
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
+from neurons.validator.models.reasoning import MISSING_REASONING_PREFIX
 from neurons.validator.scheduler.task import AbstractTask
 from neurons.validator.utils.logger.logger import NuminousLogger
 
@@ -43,7 +44,7 @@ def _load_system_prompt() -> str:
 
 
 def _is_empty_reasoning(reasoning: str | None) -> bool:
-    if not reasoning:
+    if not reasoning or reasoning.startswith(MISSING_REASONING_PREFIX):
         return True
     return False
 
@@ -76,21 +77,21 @@ class ScoreReasoning(AbstractTask):
 
     async def run(self) -> None:
         # Only fetch reasoning where the score row already exists (avoids timing issues)
+        # The reasoning is exported with the unique event ID, despite the fact that the scoring is exported with the event ID. Numinous is aware of this, and for now, we have one unique event for each event.
         rows = await self.pg_client.fetch(
             """
-            SELECT
-                r.run_id,
-                r.unique_event_id,
-                r.miner_uid,
-                r.track,
-                r.reasoning
+            SELECT r.run_id,
+                   r.unique_event_id,
+                   r.miner_uid,
+                   r.track,
+                   r.reasoning
             FROM reasoning r
-            JOIN scores s
-                ON s.event_id = r.unique_event_id
-                AND s.miner_uid = r.miner_uid
-                AND s.track = r.track
+                     JOIN scores s
+                          ON 'ifgames-' || s.event_id = r.unique_event_id
+                              AND s.miner_uid = r.miner_uid
+                              AND s.track = r.track
             WHERE r.reasoning_scored = false
-            LIMIT $1
+                LIMIT $1
             """,
             self.batch_size,
         )
@@ -107,7 +108,7 @@ class ScoreReasoning(AbstractTask):
         scored = 0
         for row in rows:
             run_id = row["run_id"]
-            event_id = row["unique_event_id"]
+            event_id = row["unique_event_id"].removeprefix("ifgames-")
             miner_uid = row["miner_uid"]
             track = row["track"]
 
