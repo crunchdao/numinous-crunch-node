@@ -12,6 +12,8 @@ from typing import List
 import asyncpg
 from fastapi import FastAPI, HTTPException, Query
 
+from neurons.validator.models.event import EventStatus
+
 from crunch_node.config import CrunchNodeConfig
 
 config = CrunchNodeConfig()
@@ -103,8 +105,43 @@ async def get_leaderboard():
     return [dict(r) for r in rows]
 
 
-@app.get("/model/events")
-async def get_model_events(
+@app.get("/model/active-events")
+async def get_model_active_events(
+    miner_uids: List[int] = Query(..., alias="projectIds"),
+    track: str | None = Query(None, alias="targetName"),
+):
+    if track is not None and track not in ("MAIN", "SIGNAL"):
+        raise HTTPException(status_code=400, detail="targetName must be MAIN or SIGNAL")
+
+    rows = await _pool.fetch(
+        """
+        SELECT
+            e.unique_event_id,
+            e.event_id,
+            e.title,
+            e.cutoff,
+            e.run_days_before_cutoff,
+            e.registered_date,
+            CASE WHEN e.metadata @> '{"topics": ["Geopolitics"]}'::jsonb
+                 THEN 'geopolitics' ELSE 'global' END AS topic,
+            p.track,
+            p.prediction,
+            p.submitted_at
+        FROM events e
+        JOIN predictions p
+            ON p.unique_event_id = e.unique_event_id
+            AND p.miner_uid = ANY($1::int[])
+            AND ($2::text IS NULL OR p.track = $2)
+        WHERE e.status = $3
+        ORDER BY e.cutoff ASC, p.track
+        """,
+        miner_uids, track, EventStatus.PENDING.value,
+    )
+    return [dict(r) for r in rows]
+
+
+@app.get("/model/scored-events")
+async def get_model_scored_events(
     miner_uids: List[int] = Query(..., alias="projectIds"),
     start_date: datetime = Query(..., alias="start"),
     end_date: datetime = Query(..., alias="end"),
@@ -143,7 +180,7 @@ async def get_model_events(
             ON p.unique_event_id = e.unique_event_id
             AND p.miner_uid = ANY($1::int[])
             AND ($4::text IS NULL OR p.track = $4)
-        LEFT JOIN scores s
+        JOIN scores s
             ON s.event_id = e.event_id
             AND s.miner_uid = p.miner_uid
             AND s.track = p.track
