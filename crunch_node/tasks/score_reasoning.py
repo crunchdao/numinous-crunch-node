@@ -78,77 +78,95 @@ class ScoreReasoning(AbstractTask):
     async def run(self) -> None:
         # Only fetch reasoning where the score row already exists (avoids timing issues)
         # The reasoning is exported with the unique event ID, despite the fact that the scoring is exported with the event ID. Numinous is aware of this, and for now, we have one unique event for each event.
-        rows = await self.pg_client.fetch(
-            """
-            SELECT r.run_id,
-                   r.unique_event_id,
-                   r.miner_uid,
-                   r.track,
-                   r.reasoning
-            FROM reasoning r
-                     JOIN scores s
-                          ON 'ifgames-' || s.event_id = r.unique_event_id
-                              AND s.miner_uid = r.miner_uid
-                              AND s.track = r.track
-            WHERE r.reasoning_scored = false
-                LIMIT $1
-            """,
-            self.batch_size,
-        )
+        total_scored = 0
+        total_empty = 0
+        total_failed = 0
+        batch_num = 0
 
-        if not rows:
+        while True:
+            rows = await self.pg_client.fetch(
+                """
+                SELECT r.run_id,
+                       r.unique_event_id,
+                       r.miner_uid,
+                       r.track,
+                       r.reasoning
+                FROM reasoning r
+                         JOIN scores s
+                              ON 'ifgames-' || s.event_id = r.unique_event_id
+                                  AND s.miner_uid = r.miner_uid
+                                  AND s.track = r.track
+                WHERE r.reasoning_scored = false
+                    LIMIT $1
+                """,
+                self.batch_size,
+            )
+
+            if not rows:
+                break
+
+            batch_num += 1
+            self.logger.info(
+                "Scoring reasoning batch",
+                extra={"batch": batch_num, "size": len(rows)},
+            )
+
+            for row in rows:
+                run_id = row["run_id"]
+                event_id = row["unique_event_id"].removeprefix("ifgames-")
+                miner_uid = row["miner_uid"]
+                track = row["track"]
+
+                try:
+                    if _is_empty_reasoning(row["reasoning"]):
+                        scores = WORST_SCORE
+                        total_empty += 1
+                    else:
+                        scores = await self._evaluate(row["reasoning"])
+                        if scores is None:
+                            total_failed += 1
+                            continue
+
+                    scores_json = json.dumps(scores)
+
+                    await self.pg_client.execute(
+                        """
+                        UPDATE scores
+                        SET reasoning_scores = $1::jsonb
+                        WHERE event_id = $2 AND miner_uid = $3 AND track = $4
+                        """,
+                        scores_json, event_id, miner_uid, track,
+                    )
+
+                    await self.pg_client.execute(
+                        "UPDATE reasoning SET reasoning_scored = true WHERE run_id = $1",
+                        run_id,
+                    )
+
+                    total_scored += 1
+
+                except Exception:
+                    total_failed += 1
+                    self.logger.exception(
+                        "Failed to score reasoning",
+                        extra={"run_id": run_id, "miner_uid": miner_uid},
+                    )
+
+            self.logger.info(
+                "Batch completed",
+                extra={"batch": batch_num, "scored": total_scored, "empty": total_empty, "failed": total_failed},
+            )
+
+            if len(rows) < self.batch_size:
+                break
+
+        if total_scored > 0 or total_empty > 0 or total_failed > 0:
+            self.logger.info(
+                "Reasoning scoring finished",
+                extra={"batches": batch_num, "scored": total_scored, "empty": total_empty, "failed": total_failed},
+            )
+        else:
             self.logger.debug("No reasoning to score")
-            return
-
-        self.logger.info(
-            "Scoring reasoning with LLM",
-            extra={"count": len(rows)},
-        )
-
-        scored = 0
-        for row in rows:
-            run_id = row["run_id"]
-            event_id = row["unique_event_id"].removeprefix("ifgames-")
-            miner_uid = row["miner_uid"]
-            track = row["track"]
-
-            try:
-                if _is_empty_reasoning(row["reasoning"]):
-                    scores = WORST_SCORE
-                else:
-                    scores = await self._evaluate(row["reasoning"])
-                    if scores is None:
-                        # LLM failed — skip, will retry next cycle
-                        continue
-
-                scores_json = json.dumps(scores)
-
-                await self.pg_client.execute(
-                    """
-                    UPDATE scores
-                    SET reasoning_scores = $1::jsonb
-                    WHERE event_id = $2 AND miner_uid = $3 AND track = $4
-                    """,
-                    scores_json, event_id, miner_uid, track,
-                )
-
-                await self.pg_client.execute(
-                    "UPDATE reasoning SET reasoning_scored = true WHERE run_id = $1",
-                    run_id,
-                )
-
-                scored += 1
-
-            except Exception:
-                self.logger.exception(
-                    "Failed to score reasoning",
-                    extra={"run_id": run_id, "miner_uid": miner_uid},
-                )
-
-        self.logger.info(
-            "Reasoning scoring completed",
-            extra={"scored": scored, "total": len(rows)},
-        )
 
     async def _evaluate(self, reasoning: str) -> dict | None:
         """Call OpenAI to evaluate reasoning. Returns dict with 5 integer scores or None."""
