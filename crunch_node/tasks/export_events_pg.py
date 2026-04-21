@@ -1,9 +1,8 @@
 """
-ExportEventsPg — reads unexported events from SQLite,
-inserts into PostgreSQL, marks as exported in SQLite.
+ExportEventsPg — exports events from SQLite to PostgreSQL.
 
-Uses a custom `pg_exported` column (added via ALTER TABLE at startup)
-since the built-in `exported` flag is already used by the scores export.
+Re-exports whenever the event status changes (e.g. resolved, cancelled).
+Uses `pg_exported_status` column to track the last exported status value.
 """
 
 from datetime import datetime
@@ -54,75 +53,72 @@ class ExportEventsPg(AbstractTask):
 
     async def run(self) -> None:
         rows = await self.db_client.many(
-            f"SELECT {_FIELDS} FROM events WHERE pg_exported = 0 LIMIT ?",
+            f"SELECT {_FIELDS} FROM events WHERE status != pg_exported_status LIMIT ?",
             parameters=[self.batch_size],
             use_row_factory=True,
         )
 
         if not rows:
-            self.logger.debug("No unexported events to export to PG")
-        else:
-            self.logger.debug(
-                "Found unexported events to export to PG",
-                extra={"n_events": len(rows)},
-            )
-
-            pg_rows = [
-                (
-                    row["unique_event_id"],
-                    row["event_id"],
-                    row["market_type"],
-                    row["event_type"],
-                    row["title"],
-                    row["description"],
-                    row["outcome"],
-                    int(row["status"]),
-                    row["metadata"],
-                    _parse_dt(row["cutoff"]),
-                    int(row["run_days_before_cutoff"]),
-                    _parse_dt(row["registered_date"]),
-                    _parse_dt(row["resolved_at"]),
-                    _parse_dt(row["created_at"]),
-                    row["tracks"],
-                )
-                for row in rows
-            ]
-
-            try:
-                await self.pg_client.executemany(
-                    """
-                    INSERT INTO events (
-                        unique_event_id, event_id, market_type, event_type,
-                        title, description, outcome, status,
-                        metadata, cutoff, run_days_before_cutoff,
-                        registered_date, resolved_at, created_at, tracks
-                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-                    ON CONFLICT (unique_event_id) DO UPDATE SET
-                        outcome = EXCLUDED.outcome,
-                        status = EXCLUDED.status,
-                        resolved_at = EXCLUDED.resolved_at
-                    """,
-                    pg_rows,
-                )
-            except Exception:
-                self.errors_count += 1
-                self.logger.exception("Failed to export events to PG")
-                return
-
-            event_ids = [row["unique_event_id"] for row in rows]
-            placeholders = ",".join("?" for _ in event_ids)
-            await self.db_client.update(
-                f"UPDATE events SET pg_exported = 1 WHERE unique_event_id IN ({placeholders})",
-                parameters=event_ids,
-            )
-
-            self.logger.debug(
-                "Exported events to PG",
-                extra={"n_events": len(event_ids)},
-            )
+            self.logger.debug("No events to export to PG")
+            return
 
         self.logger.debug(
-            "Export events PG task completed",
-            extra={"errors_count": self.errors_count},
+            "Found events to export to PG",
+            extra={"n_events": len(rows)},
+        )
+
+        pg_rows = [
+            (
+                row["unique_event_id"],
+                row["event_id"],
+                row["market_type"],
+                row["event_type"],
+                row["title"],
+                row["description"],
+                row["outcome"],
+                int(row["status"]),
+                row["metadata"],
+                _parse_dt(row["cutoff"]),
+                int(row["run_days_before_cutoff"]),
+                _parse_dt(row["registered_date"]),
+                _parse_dt(row["resolved_at"]),
+                _parse_dt(row["created_at"]),
+                row["tracks"],
+            )
+            for row in rows
+        ]
+
+        try:
+            await self.pg_client.executemany(
+                """
+                INSERT INTO events (
+                    unique_event_id, event_id, market_type, event_type,
+                    title, description, outcome, status,
+                    metadata, cutoff, run_days_before_cutoff,
+                    registered_date, resolved_at, created_at, tracks
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+                ON CONFLICT (unique_event_id) DO UPDATE SET
+                    outcome = EXCLUDED.outcome,
+                    status = EXCLUDED.status,
+                    resolved_at = EXCLUDED.resolved_at
+                """,
+                pg_rows,
+            )
+        except Exception:
+            self.errors_count += 1
+            self.logger.exception("Failed to export events to PG")
+            return
+
+        event_ids = [row["unique_event_id"] for row in rows]
+        placeholders = ",".join("?" for _ in event_ids)
+        await self.db_client.update(
+            f"UPDATE events SET pg_exported_status = status"
+            f" WHERE unique_event_id IN ({placeholders})",
+            parameters=event_ids,
+        )
+
+        self.logger.debug(
+            "Exported events to PG",
+            extra={"n_events": len(event_ids)},
         )
         self.errors_count = 0
