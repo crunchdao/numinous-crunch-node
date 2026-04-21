@@ -108,8 +108,14 @@ async def get_leaderboard():
 @app.get("/model/active-events")
 async def get_model_active_events(
     miner_uids: List[int] = Query(..., alias="projectIds"),
+    start_date: datetime = Query(..., alias="start"),
+    end_date: datetime = Query(..., alias="end"),
     track: str | None = Query(None, alias="targetName"),
 ):
+    if end_date < start_date:
+        raise HTTPException(status_code=400, detail="end must be >= start")
+    if (end_date - start_date) > timedelta(days=32):
+        raise HTTPException(status_code=400, detail="Date range must not exceed 32 days")
     if track is not None and track not in ("MAIN", "SIGNAL"):
         raise HTTPException(status_code=400, detail="targetName must be MAIN or SIGNAL")
 
@@ -125,6 +131,7 @@ async def get_model_active_events(
             CASE WHEN e.metadata @> '{"topics": ["Geopolitics"]}'::jsonb
                  THEN 'geopolitics' ELSE 'global' END AS topic,
             p.track,
+            p.miner_uid,
             p.prediction,
             p.submitted_at
         FROM events e
@@ -132,10 +139,12 @@ async def get_model_active_events(
             ON p.unique_event_id = e.unique_event_id
             AND p.miner_uid = ANY($1::int[])
             AND ($2::text IS NULL OR p.track = $2)
-        WHERE e.status = $3
+        WHERE e.registered_date >= $3
+          AND e.registered_date < $4
+          AND e.status = $5
         ORDER BY e.cutoff ASC, p.track
         """,
-        miner_uids, track, _EVENT_STATUS_PENDING,
+        miner_uids, track, start_date, end_date, _EVENT_STATUS_PENDING,
     )
     return [dict(r) for r in rows]
 
@@ -149,8 +158,8 @@ async def get_model_scored_events(
 ):
     if end_date < start_date:
         raise HTTPException(status_code=400, detail="end must be >= start")
-    if (end_date - start_date) > timedelta(days=7):
-        raise HTTPException(status_code=400, detail="Date range must not exceed 7 days")
+    if (end_date - start_date) > timedelta(days=32):
+        raise HTTPException(status_code=400, detail="Date range must not exceed 32 days")
     if track is not None and track not in ("MAIN", "SIGNAL"):
         raise HTTPException(status_code=400, detail="targetName must be MAIN or SIGNAL")
 
@@ -166,6 +175,7 @@ async def get_model_scored_events(
             e.registered_date,
             CASE WHEN e.metadata @> '{"topics": ["Geopolitics"]}'::jsonb
                  THEN 'geopolitics' ELSE 'global' END AS topic,
+            p.miner_uid,
             p.track,
             p.prediction,
             p.submitted_at,
