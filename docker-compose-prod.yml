@@ -1,6 +1,23 @@
 ## Deployment is handled by CrunchDao.
 
 services:
+  # NewRelic Alerts - applies Terraform configuration for alerts
+  newrelic-alerts:
+    image: hashicorp/terraform:latest
+    working_dir: /workspace
+    volumes:
+      - ./deployment/newrelic:/workspace
+    environment:
+      TF_VAR_project_name: ${COMPOSE_PROJECT_NAME}
+      TF_VAR_newrelic_account_id: ${NEW_RELIC_ACCOUNT_ID:-}
+      TF_VAR_newrelic_api_key: ${NEW_RELIC_API_KEY:-}
+      TF_VAR_newrelic_region: ${NEW_RELIC_REGION:-EU}
+      TF_VAR_notification_email: ${NEW_RELIC_NOTIFICATION_EMAIL:-}
+      TF_VAR_slack_webhook_url: ${NEW_RELIC_SLACK_WEBHOOK_URL:-}
+      TF_VAR_slack_channel: ${NEW_RELIC_SLACK_CHANNEL:-#alerts}
+      TF_VAR_infra_host_name: ${COMPOSE_PROJECT_NAME}-host
+    entrypoint: [ "/bin/sh", "/workspace/apply.sh" ]
+
   newrelic-infra:
     image: newrelic/infrastructure:latest
     container_name: newrelic-infra
