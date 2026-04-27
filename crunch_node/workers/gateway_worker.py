@@ -152,7 +152,7 @@ for route in app.router.routes:
     client_name = match.group(1)
     client_class, api_key_env_var = CLIENTS[client_name]
 
-    if client_class is None:
+    if api_key_env_var is None:
         continue
 
     if route.openapi_extra is None:
